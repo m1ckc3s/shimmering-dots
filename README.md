@@ -4,6 +4,8 @@ A growing collection of full-screen, canvas-based particle animations for the
 web — each one tunable live from a floating control panel until it looks exactly
 the way you want.
 
+<img width="1000" height="670" alt="Screen Recording 2026-05-29 at 7 03 31 PM (1)" src="https://github.com/user-attachments/assets/97b40a00-3732-4787-bfe5-3926286c1c9b" />
+
 It is **not an npm package.** There's no install step and no version to track.
 You copy the two source files into your project, dial in the look with the
 sliders, lock the values in, and ship. Think of it as a cookbook of generative
