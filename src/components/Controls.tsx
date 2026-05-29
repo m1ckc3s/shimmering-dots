@@ -1,0 +1,484 @@
+import { useEffect, useRef, useState } from "react"
+import { cn } from "@/lib/utils"
+import {
+  PATTERNS,
+  ORIGINAL_DEFAULTS,
+  WIGGLE_DEFAULTS,
+  STARFIELD_DEFAULTS,
+  TWIST_DEFAULTS,
+  type Pattern,
+  type OriginalParams,
+  type WiggleParams,
+  type StarfieldParams,
+  type TwistParams,
+} from "./PixelBackground"
+
+type Props = {
+  pattern: Pattern
+  opacity: number
+  original: OriginalParams
+  wiggle: WiggleParams
+  starfield: StarfieldParams
+  twist: TwistParams
+  onPatternChange: (v: Pattern) => void
+  onOpacityChange: (v: number) => void
+  onOriginalChange: (p: OriginalParams) => void
+  onWiggleChange: (p: WiggleParams) => void
+  onStarfieldChange: (p: StarfieldParams) => void
+  onTwistChange: (p: TwistParams) => void
+  className?: string
+}
+
+export function Controls({
+  pattern,
+  opacity,
+  original,
+  wiggle,
+  starfield,
+  twist,
+  onPatternChange,
+  onOpacityChange,
+  onOriginalChange,
+  onWiggleChange,
+  onStarfieldChange,
+  onTwistChange,
+  className,
+}: Props) {
+  const [open, setOpen] = useState(true)
+
+  const reset = () => {
+    if (pattern === "original") onOriginalChange(ORIGINAL_DEFAULTS)
+    else if (pattern === "wiggle") onWiggleChange(WIGGLE_DEFAULTS)
+    else if (pattern === "starfield") onStarfieldChange(STARFIELD_DEFAULTS)
+    else if (pattern === "twist") onTwistChange(TWIST_DEFAULTS)
+  }
+
+  return (
+    <div className={cn("relative font-mono", className)}>
+      {/* Collapsed state: a pill that expands back into the panel. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open controls"
+        className={cn(
+          "absolute bottom-0 right-0 flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 backdrop-blur-xl",
+          "text-[11px] font-medium uppercase tracking-[0.08em] text-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.45)]",
+          "origin-bottom-right transition-all duration-300 ease-out hover:text-white/90",
+          open
+            ? "pointer-events-none scale-90 opacity-0"
+            : "pointer-events-auto scale-100 opacity-100",
+        )}
+      >
+        <SlidersIcon />
+        Controls
+      </button>
+
+      <div
+        className={cn(
+          "w-64 rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl",
+          "shadow-[0_8px_32px_rgba(0,0,0,0.45)]",
+          "origin-bottom-right transition-all duration-300 ease-out",
+          open
+            ? "pointer-events-auto scale-100 opacity-100"
+            : "pointer-events-none scale-90 opacity-0",
+        )}
+      >
+        <div className="flex items-center justify-between pb-4">
+          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/50">
+            Shimmering Dots
+          </span>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close controls"
+            className="-mr-1 -mt-1 cursor-pointer rounded p-1 text-white/40 transition-colors hover:text-white/80"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+        <PatternSelect value={pattern} onChange={onPatternChange} />
+
+        <AnimatedHeight>
+          {pattern === "original" && (
+            <OriginalControls params={original} onChange={onOriginalChange} />
+          )}
+          {pattern === "wiggle" && (
+            <WiggleControls params={wiggle} onChange={onWiggleChange} />
+          )}
+          {pattern === "starfield" && (
+            <StarfieldControls params={starfield} onChange={onStarfieldChange} />
+          )}
+          {pattern === "twist" && (
+            <TwistControls params={twist} onChange={onTwistChange} />
+          )}
+        </AnimatedHeight>
+
+        <Slider
+          label="Opacity"
+          value={opacity}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={onOpacityChange}
+          format={(v) => v.toFixed(2)}
+        />
+
+          <ResetButton onClick={reset} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Animates the panel's height when the active pattern's control set changes
+// (each pattern has a different number of sliders). Measures the live content
+// with a ResizeObserver and transitions `height`; overflow is clipped so the
+// incoming controls are revealed as the box morphs.
+function AnimatedHeight({ children }: { children: React.ReactNode }) {
+  const innerRef = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState<number>()
+
+  useEffect(() => {
+    const el = innerRef.current
+    if (!el) return
+    const update = () => setHeight(el.offsetHeight)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div
+      className="overflow-hidden transition-[height] duration-300 ease-out"
+      style={{ height }}
+    >
+      {/* py-1 keeps the first/last slider thumbs (which overflow the 6px track)
+          from being clipped by overflow-hidden. */}
+      <div ref={innerRef} className="space-y-4 py-1">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function OriginalControls({
+  params,
+  onChange,
+}: {
+  params: OriginalParams
+  onChange: (p: OriginalParams) => void
+}) {
+  const set = <K extends keyof OriginalParams>(key: K, v: OriginalParams[K]) =>
+    onChange({ ...params, [key]: v })
+  return (
+    <>
+      <Slider label="Gap" value={params.gap} min={1} max={50} step={1} onChange={(v) => set("gap", v)} />
+      <Slider label="Size" value={params.dotSize} min={1} max={8} step={0.5} onChange={(v) => set("dotSize", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Speed" value={params.speed} min={0} max={100} step={1} onChange={(v) => set("speed", v)} />
+    </>
+  )
+}
+
+function WiggleControls({
+  params,
+  onChange,
+}: {
+  params: WiggleParams
+  onChange: (p: WiggleParams) => void
+}) {
+  const set = <K extends keyof WiggleParams>(key: K, v: WiggleParams[K]) =>
+    onChange({ ...params, [key]: v })
+  return (
+    <>
+      <Slider label="Count" value={params.count} min={20} max={500} step={10} onChange={(v) => set("count", v)} />
+      <RangeSlider
+        label="Size Range"
+        valueMin={params.sizeMin}
+        valueMax={params.sizeMax}
+        min={0.5}
+        max={6}
+        step={0.1}
+        onChange={(lo, hi) => onChange({ ...params, sizeMin: lo, sizeMax: hi })}
+        format={(v) => v.toFixed(1)}
+      />
+      <Slider label="Speed" value={params.speed} min={0} max={3} step={0.05} onChange={(v) => set("speed", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Twinkle" value={params.twinkle} min={0} max={5} step={0.05} onChange={(v) => set("twinkle", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Drift" value={params.drift} min={0} max={30} step={1} onChange={(v) => set("drift", v)} />
+    </>
+  )
+}
+
+function StarfieldControls({
+  params,
+  onChange,
+}: {
+  params: StarfieldParams
+  onChange: (p: StarfieldParams) => void
+}) {
+  const set = <K extends keyof StarfieldParams>(key: K, v: StarfieldParams[K]) =>
+    onChange({ ...params, [key]: v })
+  return (
+    <>
+      <Slider label="Quantity" value={params.quantity} min={1} max={500} step={1} onChange={(v) => set("quantity", v)} />
+      <Slider label="Seed" value={params.seed} min={0} max={99999} step={1} onChange={(v) => set("seed", v)} />
+      <RangeSlider
+        label="Size"
+        valueMin={params.sizeMin}
+        valueMax={params.sizeMax}
+        min={0.1}
+        max={10}
+        step={0.1}
+        onChange={(lo, hi) => onChange({ ...params, sizeMin: lo, sizeMax: hi })}
+        format={(v) => v.toFixed(1)}
+      />
+      <RangeSlider
+        label="Duration"
+        valueMin={params.durationMin}
+        valueMax={params.durationMax}
+        min={100}
+        max={10000}
+        step={100}
+        onChange={(lo, hi) =>
+          onChange({ ...params, durationMin: lo, durationMax: hi })
+        }
+        format={(v) => `${(v / 1000).toFixed(1)}s`}
+      />
+      <Slider
+        label="Faded"
+        value={params.fadedOpacity}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(v) => set("fadedOpacity", v)}
+        format={(v) => v.toFixed(2)}
+      />
+    </>
+  )
+}
+
+function TwistControls({
+  params,
+  onChange,
+}: {
+  params: TwistParams
+  onChange: (p: TwistParams) => void
+}) {
+  const set = <K extends keyof TwistParams>(key: K, v: TwistParams[K]) =>
+    onChange({ ...params, [key]: v })
+  return (
+    <>
+      <Slider label="Gap" value={params.gap} min={6} max={50} step={1} onChange={(v) => set("gap", v)} />
+      <Slider label="Size" value={params.dotSize} min={1} max={8} step={0.5} onChange={(v) => set("dotSize", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Peak" value={params.peak} min={0.05} max={1} step={0.01} onChange={(v) => set("peak", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Zoom" value={params.zoom} min={0.5} max={60} step={0.5} onChange={(v) => set("zoom", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Twist" value={params.twist} min={0.5} max={12} step={0.5} onChange={(v) => set("twist", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Arms" value={params.arms} min={1} max={6} step={1} onChange={(v) => set("arms", v)} />
+      <Slider label="Spin" value={params.spin} min={0} max={1} step={0.02} onChange={(v) => set("spin", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Drift" value={params.drift} min={0} max={500} step={10} onChange={(v) => set("drift", v)} />
+      <Slider label="Width" value={params.width} min={0.4} max={14} step={0.1} onChange={(v) => set("width", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Floor" value={params.floor} min={0} max={0.1} step={0.005} onChange={(v) => set("floor", v)} format={(v) => v.toFixed(3)} />
+    </>
+  )
+}
+
+type SliderProps = {
+  label: string
+  value: number
+  min: number
+  max: number
+  step?: number
+  onChange: (v: number) => void
+  format?: (v: number) => string
+}
+
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  format,
+}: SliderProps) {
+  // Clamp so an out-of-range value (e.g. default that exceeds max) doesn't
+  // overflow the panel layout.
+  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between text-[11px]">
+        <span className="uppercase tracking-wide text-white/70">{label}</span>
+        <span className="tabular-nums text-white/40">
+          {format ? format(value) : value.toFixed(step < 1 ? 2 : 0)}
+        </span>
+      </div>
+      <div className="relative h-1.5">
+        <div className="absolute inset-0 rounded-full bg-white/10" />
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-white/70"
+          style={{ width: `${pct}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_0_2px_rgba(0,0,0,0.5)] [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
+        />
+      </div>
+    </div>
+  )
+}
+
+type RangeSliderProps = {
+  label: string
+  valueMin: number
+  valueMax: number
+  min: number
+  max: number
+  step?: number
+  onChange: (lo: number, hi: number) => void
+  format?: (v: number) => string
+}
+
+function RangeSlider({
+  label,
+  valueMin,
+  valueMax,
+  min,
+  max,
+  step = 1,
+  onChange,
+  format,
+}: RangeSliderProps) {
+  const range = max - min
+  const lowPct = ((valueMin - min) / range) * 100
+  const highPct = ((valueMax - min) / range) * 100
+  const fmt = (v: number) => (format ? format(v) : v.toFixed(step < 1 ? 2 : 0))
+
+  const inputCls =
+    "absolute inset-0 h-full w-full appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_0_2px_rgba(0,0,0,0.5)] [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white"
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between text-[11px]">
+        <span className="uppercase tracking-wide text-white/70">{label}</span>
+        <span className="tabular-nums text-white/40">
+          {fmt(valueMin)} – {fmt(valueMax)}
+        </span>
+      </div>
+      <div className="relative h-1.5">
+        <div className="absolute inset-0 rounded-full bg-white/10" />
+        <div
+          className="absolute inset-y-0 rounded-full bg-white/70"
+          style={{ left: `${lowPct}%`, width: `${Math.max(0, highPct - lowPct)}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={valueMin}
+          onChange={(e) => {
+            const v = Math.min(Number(e.target.value), valueMax)
+            onChange(v, valueMax)
+          }}
+          className={inputCls}
+          style={{ zIndex: valueMin > max - range * 0.05 ? 2 : 1 }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={valueMax}
+          onChange={(e) => {
+            const v = Math.max(Number(e.target.value), valueMin)
+            onChange(valueMin, v)
+          }}
+          className={inputCls}
+        />
+      </div>
+    </div>
+  )
+}
+
+function PatternSelect({
+  value,
+  onChange,
+}: {
+  value: Pattern
+  onChange: (v: Pattern) => void
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-md bg-white/[0.04] p-0.5">
+      {PATTERNS.map((p) => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => onChange(p)}
+          className={cn(
+            "cursor-pointer rounded px-2 py-1 text-[11px] uppercase tracking-wider transition-colors",
+            value === p
+              ? "bg-white/15 text-white"
+              : "text-white/50 hover:text-white/80",
+          )}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
+    </svg>
+  )
+}
+
+function SlidersIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M2 4h6M11 4h1M2 10h1M6 10h6" />
+      <circle cx="9.5" cy="4" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="10" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+function ResetButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-1 w-full cursor-pointer rounded-md border border-white/10 bg-white/[0.02] px-2 py-1.5 text-[11px] uppercase tracking-wide text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white/90"
+    >
+      Reset
+    </button>
+  )
+}
