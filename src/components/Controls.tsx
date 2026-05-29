@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import {
   PATTERNS,
-  ORIGINAL_DEFAULTS,
+  GRID_DEFAULTS,
   WIGGLE_DEFAULTS,
   STARFIELD_DEFAULTS,
   TWIST_DEFAULTS,
   type Pattern,
-  type OriginalParams,
+  type GridParams,
   type WiggleParams,
   type StarfieldParams,
   type TwistParams,
@@ -16,13 +16,13 @@ import {
 type Props = {
   pattern: Pattern
   opacity: number
-  original: OriginalParams
+  grid: GridParams
   wiggle: WiggleParams
   starfield: StarfieldParams
   twist: TwistParams
   onPatternChange: (v: Pattern) => void
   onOpacityChange: (v: number) => void
-  onOriginalChange: (p: OriginalParams) => void
+  onGridChange: (p: GridParams) => void
   onWiggleChange: (p: WiggleParams) => void
   onStarfieldChange: (p: StarfieldParams) => void
   onTwistChange: (p: TwistParams) => void
@@ -32,13 +32,13 @@ type Props = {
 export function Controls({
   pattern,
   opacity,
-  original,
+  grid,
   wiggle,
   starfield,
   twist,
   onPatternChange,
   onOpacityChange,
-  onOriginalChange,
+  onGridChange,
   onWiggleChange,
   onStarfieldChange,
   onTwistChange,
@@ -47,7 +47,7 @@ export function Controls({
   const [open, setOpen] = useState(true)
 
   const reset = () => {
-    if (pattern === "original") onOriginalChange(ORIGINAL_DEFAULTS)
+    if (pattern === "grid") onGridChange(GRID_DEFAULTS)
     else if (pattern === "wiggle") onWiggleChange(WIGGLE_DEFAULTS)
     else if (pattern === "starfield") onStarfieldChange(STARFIELD_DEFAULTS)
     else if (pattern === "twist") onTwistChange(TWIST_DEFAULTS)
@@ -101,8 +101,8 @@ export function Controls({
         <PatternSelect value={pattern} onChange={onPatternChange} />
 
         <AnimatedHeight>
-          {pattern === "original" && (
-            <OriginalControls params={original} onChange={onOriginalChange} />
+          {pattern === "grid" && (
+            <GridControls params={grid} onChange={onGridChange} />
           )}
           {pattern === "wiggle" && (
             <WiggleControls params={wiggle} onChange={onWiggleChange} />
@@ -164,18 +164,18 @@ function AnimatedHeight({ children }: { children: React.ReactNode }) {
   )
 }
 
-function OriginalControls({
+function GridControls({
   params,
   onChange,
 }: {
-  params: OriginalParams
-  onChange: (p: OriginalParams) => void
+  params: GridParams
+  onChange: (p: GridParams) => void
 }) {
-  const set = <K extends keyof OriginalParams>(key: K, v: OriginalParams[K]) =>
+  const set = <K extends keyof GridParams>(key: K, v: GridParams[K]) =>
     onChange({ ...params, [key]: v })
   return (
     <>
-      <Slider label="Gap" value={params.gap} min={1} max={50} step={1} onChange={(v) => set("gap", v)} />
+      <Slider label="Gap" value={params.gap} min={5} max={50} step={1} onChange={(v) => set("gap", v)} />
       <Slider label="Size" value={params.dotSize} min={1} max={8} step={0.5} onChange={(v) => set("dotSize", v)} format={(v) => v.toFixed(1)} />
       <Slider label="Speed" value={params.speed} min={0} max={100} step={1} onChange={(v) => set("speed", v)} />
     </>

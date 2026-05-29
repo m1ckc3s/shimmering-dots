@@ -17,7 +17,7 @@ New patterns get added over time. Today there are four.
 
 | Pattern | Look |
 | --- | --- |
-| `original` | Dense grid of dark dots that reveal on a random delay, then perpetually size-shimmer. Deliberately subtle. |
+| `grid` | Dense grid of dark dots that reveal on a random delay, then perpetually size-shimmer. Deliberately subtle. |
 | `wiggle` | Sparse particles drifting and twinkling on independent per-particle rhythms, so the field never locks into a single beat. |
 | `starfield` | Seeded, motionless star grid where each star pulses through its own fade cycle. Stable across window resizes. |
 | `twist` | A near-blank grid lit by a rotating Archimedean spiral vortex. Zoom is a true camera dolly; Twist sets the arm count. |

@@ -19,4 +19,14 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // This file deliberately co-exports the pattern types and *_DEFAULTS next
+    // to the canvas component (Controls and App import them). That trips the
+    // react-refresh rule, which only governs dev-time Fast Refresh and has no
+    // bearing on the build — scope it off here.
+    files: ['src/components/PixelBackground.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

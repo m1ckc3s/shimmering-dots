@@ -2,8 +2,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 // Patterns:
-//   original  — verbatim port of the lab playground. Random-delay reveal
-//               + perpetual size shimmer on a dense grid.
+//   grid      — random-delay reveal + perpetual size shimmer on a dense
+//               grid of dark dots.
 //   wiggle    — sparse white particles with two independent animation
 //               cycles (drift + twinkle). Port of StarrySkyView.swift.
 //   starfield — port of MicksStars.tsx (Framer). Seeded random
@@ -13,10 +13,10 @@ import { cn } from "@/lib/utils"
 //               (uniform arc spacing). Arms converge at a 2D-drifting centre;
 //               Zoom dollies the whole structure, Twist sets the arm count.
 
-export const PATTERNS = ["original", "wiggle", "starfield", "twist"] as const
+export const PATTERNS = ["grid", "wiggle", "starfield", "twist"] as const
 export type Pattern = (typeof PATTERNS)[number]
 
-export type OriginalParams = {
+export type GridParams = {
   gap: number
   dotSize: number
   speed: number
@@ -54,7 +54,7 @@ export type TwistParams = {
   floor: number
 }
 
-export const ORIGINAL_DEFAULTS: OriginalParams = {
+export const GRID_DEFAULTS: GridParams = {
   gap: 25,
   dotSize: 3.5,
   speed: 49,
@@ -92,7 +92,7 @@ export const TWIST_DEFAULTS: TwistParams = {
   floor: 0,
 }
 
-// ─── Pattern: original ──────────────────────────────────────────────
+// ─── Pattern: grid ──────────────────────────────────────────────────
 
 class Pixel {
   width: number
@@ -469,12 +469,12 @@ function renderTwist(
 
 // ─── Component ──────────────────────────────────────────────────────
 
-const ORIGINAL_COLORS = "#2a2a2a,#3b3b3b,#525252"
+const GRID_COLORS = "#2a2a2a,#3b3b3b,#525252"
 
 type Props = {
   pattern: Pattern
   pixelOpacity: number
-  original: OriginalParams
+  grid: GridParams
   wiggle: WiggleParams
   starfield: StarfieldParams
   twist: TwistParams
@@ -485,7 +485,7 @@ type Props = {
 export function PixelBackground({
   pattern,
   pixelOpacity,
-  original,
+  grid,
   wiggle,
   starfield,
   twist,
@@ -510,19 +510,25 @@ export function PixelBackground({
     speed: wiggle.speed,
     twinkle: wiggle.twinkle,
   })
-  wiggleLiveRef.current.sizeMin = wiggle.sizeMin
-  wiggleLiveRef.current.sizeMax = wiggle.sizeMax
-  wiggleLiveRef.current.drift = wiggle.drift
-  wiggleLiveRef.current.speed = wiggle.speed
-  wiggleLiveRef.current.twinkle = wiggle.twinkle
-
   const twistLiveRef = React.useRef(twist)
-  twistLiveRef.current = twist
   const starfieldLiveRef = React.useRef(starfield)
-  starfieldLiveRef.current = starfield
-
   const liveRef = React.useRef({ pattern })
-  liveRef.current = { pattern }
+
+  // Push the latest slider values into the mutable refs the RAF loop reads.
+  // Done after commit (not during render) so we never mutate refs mid-render.
+  // No dep array on purpose: this must run on every commit, and it stays
+  // before the init effect so a pattern switch is visible to the loop in sync
+  // with the reinit.
+  React.useEffect(() => {
+    wiggleLiveRef.current.sizeMin = wiggle.sizeMin
+    wiggleLiveRef.current.sizeMax = wiggle.sizeMax
+    wiggleLiveRef.current.drift = wiggle.drift
+    wiggleLiveRef.current.speed = wiggle.speed
+    wiggleLiveRef.current.twinkle = wiggle.twinkle
+    twistLiveRef.current = twist
+    starfieldLiveRef.current = starfield
+    liveRef.current = { pattern }
+  })
 
   React.useEffect(() => {
     reducedMotionRef.current = window.matchMedia(
@@ -567,13 +573,13 @@ export function PixelBackground({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     dimsRef.current = { w: width, h: height }
 
-    if (pattern === "original") {
-      const gapInt = Math.max(1, Math.floor(original.gap))
-      const colorsArray = ORIGINAL_COLORS.split(",")
+    if (pattern === "grid") {
+      const gapInt = Math.max(1, Math.floor(grid.gap))
+      const colorsArray = GRID_COLORS.split(",")
       const pxs: Pixel[] = []
-      const effSpeed = getEffectiveSpeed(original.speed, reducedMotionRef.current)
+      const effSpeed = getEffectiveSpeed(grid.speed, reducedMotionRef.current)
       const diag = Math.sqrt(width * width + height * height)
-      const sz = Math.max(1, original.dotSize)
+      const sz = Math.max(1, grid.dotSize)
       for (let x = 0; x < width; x += gapInt) {
         for (let y = 0; y < height; y += gapInt) {
           const color =
@@ -618,9 +624,9 @@ export function PixelBackground({
     }
   }, [
     pattern,
-    original.gap,
-    original.dotSize,
-    original.speed,
+    grid.gap,
+    grid.dotSize,
+    grid.speed,
     wiggle.count,
     twist.gap,
   ])
@@ -640,7 +646,7 @@ export function PixelBackground({
       const dt = now - lastFrameRef.current
       const pat = liveRef.current.pattern
 
-      if (pat === "original") {
+      if (pat === "grid") {
         const timeInterval = 1000 / 60
         if (dt < timeInterval) return
         lastFrameRef.current = now - (dt % timeInterval)
@@ -655,7 +661,7 @@ export function PixelBackground({
       const dpr = window.devicePixelRatio || 1
       ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
 
-      if (pat === "original") {
+      if (pat === "grid") {
         const pixels = pixelsRef.current
         for (let i = 0; i < pixels.length; i++) pixels[i].appear()
       } else if (pat === "wiggle") {

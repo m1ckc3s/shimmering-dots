@@ -31,7 +31,7 @@ pnpm preview  # serve the production build
 
 Three files do everything:
 
-- [src/App.tsx](src/App.tsx) — holds one state object per pattern (`original`,
+- [src/App.tsx](src/App.tsx) — holds one state object per pattern (`grid`,
   `wiggle`, `starfield`, `twist`), the active `pattern`, and a per-pattern
   `opacity` map (`OPACITY_DEFAULTS`). Switching patterns preserves each
   pattern's params and its own opacity.
@@ -56,7 +56,7 @@ Three files do everything:
 
 ## Patterns
 
-### `original`
+### `grid`
 Dense grid; each cell does a random-delay reveal then perpetually
 size-shimmers between `minSize` and a per-cell random `maxSize`. Palette is dark
 grays (`#2a2a2a,#3b3b3b,#525252`) on the `#070707` page — deliberately subtle.
@@ -111,7 +111,7 @@ Params: `gap`, `dotSize`, `peak`, `zoom`, `twist`, `arms`, `spin`, `drift`,
   animation by reference through a mutable ref per pattern (`twistLiveRef`,
   etc.), so drags stay smooth. Only structural params (`gap`, `count`, `seed`)
   are in the `init` dependency array and trigger a full reinit.
-- **`original` is throttled to ~60fps.** Its size math is per-frame, not
+- **`grid` is throttled to ~60fps.** Its size math is per-frame, not
   dt-scaled. `lastFrameRef` must advance only on rendered frames, or the
   throttle starves the loop on high-refresh displays. Other patterns are
   dt-scaled (or use absolute time) and run every RAF.
