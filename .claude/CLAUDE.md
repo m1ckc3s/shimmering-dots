@@ -32,8 +32,9 @@ pnpm preview  # serve the production build
 Three files do everything:
 
 - [src/App.tsx](src/App.tsx) — holds one state object per pattern (`original`,
-  `wiggle`, `starfield`, `twist`) plus the active `pattern` and global
-  `opacity`. Switching patterns preserves each pattern's params.
+  `wiggle`, `starfield`, `twist`), the active `pattern`, and a per-pattern
+  `opacity` map (`OPACITY_DEFAULTS`). Switching patterns preserves each
+  pattern's params and its own opacity.
 - [src/components/PixelBackground.tsx](src/components/PixelBackground.tsx) —
   pattern type defs, exported defaults, per-pattern render logic, and the canvas
   component (DPR-aware sizing, init, and the RAF loop). Types and defaults are
