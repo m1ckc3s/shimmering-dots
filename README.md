@@ -105,8 +105,3 @@ pnpm lint       # eslint .
 Vite · React 19 · TypeScript · Tailwind v4 · Canvas 2D. No component or
 animation frameworks — per-pixel canvas work is the right tool, and the controls
 are hand-rolled.
-
-## License
-
-MIT. Do whatever you want with it; attribution appreciated but not required.
-See [`LICENSE`](./LICENSE).
