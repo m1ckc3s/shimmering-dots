@@ -6,11 +6,15 @@ import {
   WIGGLE_DEFAULTS,
   STARFIELD_DEFAULTS,
   TWIST_DEFAULTS,
+  DISPLACE_DEFAULTS,
+  SHIMMER_DEFAULTS,
   type Pattern,
   type GridParams,
   type WiggleParams,
   type StarfieldParams,
   type TwistParams,
+  type DisplaceParams,
+  type ShimmerParams,
 } from "./PixelBackground"
 
 type Props = {
@@ -20,12 +24,16 @@ type Props = {
   wiggle: WiggleParams
   starfield: StarfieldParams
   twist: TwistParams
+  displace: DisplaceParams
+  shimmer: ShimmerParams
   onPatternChange: (v: Pattern) => void
   onOpacityChange: (v: number) => void
   onGridChange: (p: GridParams) => void
   onWiggleChange: (p: WiggleParams) => void
   onStarfieldChange: (p: StarfieldParams) => void
   onTwistChange: (p: TwistParams) => void
+  onDisplaceChange: (p: DisplaceParams) => void
+  onShimmerChange: (p: ShimmerParams) => void
   className?: string
 }
 
@@ -36,12 +44,16 @@ export function Controls({
   wiggle,
   starfield,
   twist,
+  displace,
+  shimmer,
   onPatternChange,
   onOpacityChange,
   onGridChange,
   onWiggleChange,
   onStarfieldChange,
   onTwistChange,
+  onDisplaceChange,
+  onShimmerChange,
   className,
 }: Props) {
   const [open, setOpen] = useState(true)
@@ -51,6 +63,8 @@ export function Controls({
     else if (pattern === "wiggle") onWiggleChange(WIGGLE_DEFAULTS)
     else if (pattern === "starfield") onStarfieldChange(STARFIELD_DEFAULTS)
     else if (pattern === "twist") onTwistChange(TWIST_DEFAULTS)
+    else if (pattern === "displace") onDisplaceChange(DISPLACE_DEFAULTS)
+    else if (pattern === "shimmer") onShimmerChange(SHIMMER_DEFAULTS)
   }
 
   return (
@@ -112,6 +126,12 @@ export function Controls({
           )}
           {pattern === "twist" && (
             <TwistControls params={twist} onChange={onTwistChange} />
+          )}
+          {pattern === "displace" && (
+            <DisplaceControls params={displace} onChange={onDisplaceChange} />
+          )}
+          {pattern === "shimmer" && (
+            <ShimmerControls params={shimmer} onChange={onShimmerChange} />
           )}
         </AnimatedHeight>
 
@@ -280,6 +300,69 @@ function TwistControls({
       <Slider label="Drift" value={params.drift} min={0} max={500} step={10} onChange={(v) => set("drift", v)} />
       <Slider label="Width" value={params.width} min={0.4} max={14} step={0.1} onChange={(v) => set("width", v)} format={(v) => v.toFixed(1)} />
       <Slider label="Floor" value={params.floor} min={0} max={0.1} step={0.005} onChange={(v) => set("floor", v)} format={(v) => v.toFixed(3)} />
+    </>
+  )
+}
+
+function DisplaceControls({
+  params,
+  onChange,
+}: {
+  params: DisplaceParams
+  onChange: (p: DisplaceParams) => void
+}) {
+  const set = <K extends keyof DisplaceParams>(key: K, v: DisplaceParams[K]) =>
+    onChange({ ...params, [key]: v })
+  return (
+    <>
+      <Slider label="Count" value={params.count} min={10} max={300} step={10} onChange={(v) => set("count", v)} />
+      <Slider label="Emission" value={params.emission} min={0} max={30} step={1} onChange={(v) => set("emission", v)} />
+      <RangeSlider
+        label="Size"
+        valueMin={params.sizeMin}
+        valueMax={params.sizeMax}
+        min={0.5}
+        max={8}
+        step={0.1}
+        onChange={(lo, hi) => onChange({ ...params, sizeMin: lo, sizeMax: hi })}
+        format={(v) => v.toFixed(1)}
+      />
+      <RangeSlider
+        label="Speed"
+        valueMin={params.speedMin}
+        valueMax={params.speedMax}
+        min={5}
+        max={150}
+        step={1}
+        onChange={(lo, hi) => onChange({ ...params, speedMin: lo, speedMax: hi })}
+      />
+      <Slider label="Lifetime" value={params.lifetime} min={1} max={15} step={0.5} onChange={(v) => set("lifetime", v)} format={(v) => `${v.toFixed(1)}s`} />
+      <Slider label="Drift" value={params.drift} min={0} max={40} step={1} onChange={(v) => set("drift", v)} />
+      <Slider label="Force Radius" value={params.forceRadius} min={20} max={300} step={5} onChange={(v) => set("forceRadius", v)} />
+      <Slider label="Force" value={params.forceStrength} min={0} max={800} step={10} onChange={(v) => set("forceStrength", v)} />
+      <Slider label="Friction" value={params.friction} min={0.8} max={0.99} step={0.01} onChange={(v) => set("friction", v)} format={(v) => v.toFixed(2)} />
+    </>
+  )
+}
+
+function ShimmerControls({
+  params,
+  onChange,
+}: {
+  params: ShimmerParams
+  onChange: (p: ShimmerParams) => void
+}) {
+  const set = <K extends keyof ShimmerParams>(key: K, v: ShimmerParams[K]) =>
+    onChange({ ...params, [key]: v })
+  return (
+    <>
+      <Slider label="Spacing" value={params.spacing} min={8} max={50} step={1} onChange={(v) => set("spacing", v)} />
+      <Slider label="Size" value={params.dotSize} min={1} max={10} step={0.5} onChange={(v) => set("dotSize", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Speed" value={params.shimmerSpeed} min={0.5} max={5} step={0.1} onChange={(v) => set("shimmerSpeed", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Wave X" value={params.dxFactor} min={0.05} max={1} step={0.05} onChange={(v) => set("dxFactor", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Wave Y" value={params.dyFactor} min={0.05} max={1} step={0.05} onChange={(v) => set("dyFactor", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Base" value={params.baseAlpha} min={0} max={1} step={0.05} onChange={(v) => set("baseAlpha", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Intensity" value={params.alphaMultiplier} min={0} max={8} step={0.1} onChange={(v) => set("alphaMultiplier", v)} format={(v) => v.toFixed(1)} />
     </>
   )
 }

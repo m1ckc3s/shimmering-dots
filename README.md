@@ -11,7 +11,7 @@ You copy the two source files into your project, dial in the look with the
 sliders, lock the values in, and ship. Think of it as a cookbook of generative
 backgrounds you own outright, not a dependency you pull in.
 
-New patterns get added over time. Today there are four.
+New patterns get added over time. Today there are six.
 
 ## Patterns
 
@@ -21,6 +21,8 @@ New patterns get added over time. Today there are four.
 | `wiggle` | Sparse particles drifting and twinkling on independent per-particle rhythms, so the field never locks into a single beat. |
 | `starfield` | Seeded, motionless star grid where each star pulses through its own fade cycle. Stable across window resizes. |
 | `twist` | A near-blank grid lit by a rotating Archimedean spiral vortex. Zoom is a true camera dolly; Twist sets the arm count. |
+| `displace` | Particles drift upward and fade across their lifetime; moving the cursor (or a touch) repels nearby ones, then friction settles them back into the rise. The only interactive pattern. |
+| `shimmer` | Dot grid whose per-dot opacity rides overlapping sine waves — a global travelling wave plus a hashed per-dot pulse — so it shimmers without locking into one rhythm. |
 
 Every pattern renders to a single `<canvas>` via plain Canvas 2D +
 `requestAnimationFrame`. No WebGL, no animation libraries.

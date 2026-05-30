@@ -5,11 +5,15 @@ import {
   WIGGLE_DEFAULTS,
   STARFIELD_DEFAULTS,
   TWIST_DEFAULTS,
+  DISPLACE_DEFAULTS,
+  SHIMMER_DEFAULTS,
   type Pattern,
   type GridParams,
   type WiggleParams,
   type StarfieldParams,
   type TwistParams,
+  type DisplaceParams,
+  type ShimmerParams,
 } from "@/components/PixelBackground"
 import { Controls } from "@/components/Controls"
 
@@ -20,6 +24,8 @@ const OPACITY_DEFAULTS: Record<Pattern, number> = {
   wiggle: 0.65,
   starfield: 0.65,
   twist: 0.65,
+  displace: 1,
+  shimmer: 0.65,
 }
 
 export default function App() {
@@ -34,6 +40,8 @@ export default function App() {
   const [wiggle, setWiggle] = useState<WiggleParams>(WIGGLE_DEFAULTS)
   const [starfield, setStarfield] = useState<StarfieldParams>(STARFIELD_DEFAULTS)
   const [twist, setTwist] = useState<TwistParams>(TWIST_DEFAULTS)
+  const [displace, setDisplace] = useState<DisplaceParams>(DISPLACE_DEFAULTS)
+  const [shimmer, setShimmer] = useState<ShimmerParams>(SHIMMER_DEFAULTS)
 
   return (
     <div className="relative h-full w-full bg-[#070707]">
@@ -44,6 +52,8 @@ export default function App() {
         wiggle={wiggle}
         starfield={starfield}
         twist={twist}
+        displace={displace}
+        shimmer={shimmer}
         className="absolute inset-0"
       />
       <div className="pointer-events-none fixed bottom-6 right-6 z-10">
@@ -54,12 +64,16 @@ export default function App() {
           wiggle={wiggle}
           starfield={starfield}
           twist={twist}
+          displace={displace}
+          shimmer={shimmer}
           onPatternChange={setPattern}
           onOpacityChange={setOpacity}
           onGridChange={setGrid}
           onWiggleChange={setWiggle}
           onStarfieldChange={setStarfield}
           onTwistChange={setTwist}
+          onDisplaceChange={setDisplace}
+          onShimmerChange={setShimmer}
         />
       </div>
     </div>
