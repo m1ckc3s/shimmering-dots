@@ -12,8 +12,16 @@ import { cn } from "@/lib/utils"
 //   twist      — near-blank grid lit by a rotating Archimedean spiral vortex
 //               (uniform arc spacing). Arms converge at a 2D-drifting centre;
 //               Zoom dollies the whole structure, Twist sets the arm count.
+//   displace  — particles drift upward and fade in/out over their lifetime;
+//               moving the cursor (or a touch) repels nearby ones with a
+//               quadratic falloff, then friction settles them back into the
+//               rise. Ported from an iOS onboarding `floatingParticles` modifier.
+//   shimmer   — dense dot grid whose per-dot alpha is driven by overlapping
+//               sine waves: a global travelling wave plus a per-dot pulse with
+//               a hashed phase/frequency, so the field shimmers without locking
+//               into one rhythm. Ported from a SwiftUI `DotPatternView`.
 
-export const PATTERNS = ["grid", "wiggle", "starfield", "twist"] as const
+export const PATTERNS = ["grid", "wiggle", "starfield", "twist", "displace", "shimmer"] as const
 export type Pattern = (typeof PATTERNS)[number]
 
 export type GridParams = {
@@ -54,6 +62,30 @@ export type TwistParams = {
   floor: number
 }
 
+export type ShimmerParams = {
+  spacing: number // dot grid pitch, px (structural)
+  dotSize: number
+  shimmerSpeed: number // per-dot pulse rate
+  dxFactor: number // global wave spatial frequency, x
+  dyFactor: number // global wave spatial frequency, y
+  baseAlpha: number // floor opacity every dot keeps
+  alphaMultiplier: number // how far the shimmer swings above the floor
+}
+
+export type DisplaceParams = {
+  count: number // max particles alive at once
+  emission: number // spawns per second
+  sizeMin: number
+  sizeMax: number
+  speedMin: number // upward speed, px/s
+  speedMax: number
+  lifetime: number // seconds (with internal ±15% jitter)
+  drift: number // horizontal wander amplitude, px/s
+  forceRadius: number // pointer influence radius, px
+  forceStrength: number // pointer push strength
+  friction: number // per-frame velocity retention at 60fps (0–1)
+}
+
 export const GRID_DEFAULTS: GridParams = {
   gap: 25,
   dotSize: 3.5,
@@ -90,6 +122,31 @@ export const TWIST_DEFAULTS: TwistParams = {
   drift: 270,
   width: 6,
   floor: 0,
+}
+
+// Values carried over from the SwiftUI DotPatternView defaults.
+export const SHIMMER_DEFAULTS: ShimmerParams = {
+  spacing: 18,
+  dotSize: 3,
+  shimmerSpeed: 2.0,
+  dxFactor: 0.25,
+  dyFactor: 0.21,
+  baseAlpha: 0.2,
+  alphaMultiplier: 3.0,
+}
+
+export const DISPLACE_DEFAULTS: DisplaceParams = {
+  count: 260,
+  emission: 20,
+  sizeMin: 1.0,
+  sizeMax: 3.3,
+  speedMin: 35,
+  speedMax: 65,
+  lifetime: 11.0,
+  drift: 10,
+  forceRadius: 120,
+  forceStrength: 470,
+  friction: 0.92,
 }
 
 // ─── Pattern: grid ──────────────────────────────────────────────────
@@ -467,6 +524,194 @@ function renderTwist(
   }
 }
 
+// ─── Pattern: shimmer ────────────────────────────────────────────────
+// A dot grid whose per-dot alpha is the sum of two sine sources: a global
+// travelling wave (dxFactor/dyFactor set its spatial frequency across the
+// grid) and a per-dot pulse with a hashed phase and frequency. Blended and
+// rectified into an opacity that swings from `baseAlpha` up by `alphaMultiplier`.
+
+type ShimmerCell = {
+  x: number
+  y: number
+  col: number
+  row: number
+  phase: number // 0–2π, hashed per cell
+  freq: number // 0.7–1.7, hashed per cell
+}
+const SHIMMER_RGB = "160,160,160"
+
+function renderShimmer(
+  ctx: CanvasRenderingContext2D,
+  cells: ShimmerCell[],
+  p: ShimmerParams,
+  t: number,
+) {
+  const half = Math.max(0.5, p.dotSize) / 2
+  const speed = p.shimmerSpeed
+  const dxF = p.dxFactor
+  const dyF = p.dyFactor
+  const base = p.baseAlpha
+  const mult = p.alphaMultiplier
+  const wave1 = t * 0.6
+  const wave2 = t * 0.4
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i]
+    const baseWave =
+      Math.sin(wave1 + c.col * dxF) + Math.cos(wave2 + c.row * dyF)
+    const pulse = Math.sin(t * speed * c.freq + c.phase)
+    const blended = (pulse + baseWave) / 4
+    const alpha = base + mult * Math.abs(blended)
+    if (alpha < 0.01) continue
+    ctx.fillStyle = `rgba(${SHIMMER_RGB},${alpha < 1 ? alpha : 1})`
+    ctx.beginPath()
+    ctx.arc(c.x, c.y, half, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+// ─── Pattern: displace ────────────────────────────────────────────────
+// Upward-drifting particles with a pointer-repulsion force field. Each
+// particle rises at its own speed, wanders horizontally, and fades in →
+// peak → out across its lifetime. A pointer press/drag deposits short-lived
+// TouchForces; nearby particles are pushed away (quadratic falloff inside a
+// radius) and friction bleeds that velocity off so they rejoin the rise.
+
+type Floater = {
+  x: number
+  y: number
+  sizeT: number // 0–1 lerp across [sizeMin, sizeMax]
+  speedT: number // 0–1 lerp across [speedMin, speedMax]
+  driftDir: number // −1..1 horizontal drift scale
+  vx: number // interactive velocity (from pointer forces)
+  vy: number
+  birth: number // seconds
+  lifetime: number // seconds
+  peak: number // peak opacity
+}
+
+type TouchForce = { x: number; y: number; t: number } // t in seconds
+
+const FLOAT_DECAY = 0.3 // seconds a pointer force stays active
+const FLOAT_FADE_IN = 0.5 // seconds
+const FLOAT_FADE_OUT = 1.0 // seconds
+const FLOAT_SPAWN_LO = 0.3 // spawn band, as a fraction of view height
+const FLOAT_SPAWN_HI = 1.05
+
+function spawnFloater(
+  width: number,
+  height: number,
+  p: DisplaceParams,
+  now: number,
+  ageOffset = 0,
+): Floater {
+  const frac = FLOAT_SPAWN_LO + Math.random() * (FLOAT_SPAWN_HI - FLOAT_SPAWN_LO)
+  const jitter = 1 + (Math.random() * 2 - 1) * 0.15
+  return {
+    x: Math.random() * width,
+    y: height * frac,
+    sizeT: Math.random(),
+    speedT: Math.random(),
+    driftDir: Math.random() * 2 - 1,
+    vx: 0,
+    vy: 0,
+    birth: now - ageOffset,
+    lifetime: Math.max(0.5, p.lifetime * jitter),
+    peak: 0.9,
+  }
+}
+
+// Physics step + cull + emission. Mutates `floaters` in place (compacting the
+// array) and reads everything else from the live params, so slider edits apply
+// without a reinit.
+function updateFloaters(
+  floaters: Floater[],
+  forces: TouchForce[],
+  p: DisplaceParams,
+  width: number,
+  height: number,
+  now: number,
+  dt: number,
+) {
+  // Make friction framerate-independent: the source applied it once per 60fps
+  // frame, so raise it to (dt·60) to match across refresh rates.
+  const frictionPow = Math.pow(p.friction, dt * 60)
+  const speedSpan = Math.max(0, p.speedMax - p.speedMin)
+
+  let w = 0
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i]
+
+    // Pointer repulsion — push away from each active force, quadratic falloff.
+    for (let j = 0; j < forces.length; j++) {
+      const force = forces[j]
+      const dx = f.x - force.x
+      const dy = f.y - force.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist < p.forceRadius && dist > 0) {
+        const factor = 1 - dist / p.forceRadius
+        const strength = p.forceStrength * factor * factor
+        f.vx += (dx / dist) * strength * dt
+        f.vy += (dy / dist) * strength * dt
+      }
+    }
+
+    // Friction, then integrate the interactive velocity.
+    f.vx *= frictionPow
+    f.vy *= frictionPow
+    f.x += f.vx * dt
+    f.y += f.vy * dt
+
+    // Constant upward rise + gentle horizontal wander.
+    f.y -= (p.speedMin + f.speedT * speedSpan) * dt
+    f.x += f.driftDir * p.drift * dt
+
+    const age = now - f.birth
+    if (age > f.lifetime || f.y < -10) continue // cull
+    floaters[w++] = f
+  }
+  floaters.length = w
+
+  // Emit up to the live cap. Whole spawns this frame plus a fractional chance.
+  const cap = Math.max(0, Math.floor(p.count))
+  let toEmit = p.emission * dt
+  while (toEmit >= 1 && floaters.length < cap) {
+    floaters.push(spawnFloater(width, height, p, now))
+    toEmit -= 1
+  }
+  if (floaters.length < cap && Math.random() < toEmit) {
+    floaters.push(spawnFloater(width, height, p, now))
+  }
+}
+
+function drawFloaters(
+  ctx: CanvasRenderingContext2D,
+  floaters: Floater[],
+  p: DisplaceParams,
+  now: number,
+) {
+  const sizeSpan = Math.max(0, p.sizeMax - p.sizeMin)
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i]
+    const age = now - f.birth
+    if (age < 0 || age > f.lifetime) continue
+    let opacity: number
+    if (age < FLOAT_FADE_IN) {
+      opacity = (age / FLOAT_FADE_IN) * f.peak
+    } else if (age > f.lifetime - FLOAT_FADE_OUT) {
+      opacity = Math.max(0, ((f.lifetime - age) / FLOAT_FADE_OUT) * f.peak)
+    } else {
+      opacity = f.peak
+    }
+    if (opacity <= 0.01) continue
+    const radius = (p.sizeMin + f.sizeT * sizeSpan) / 2
+    if (radius <= 0.05) continue
+    ctx.fillStyle = `rgba(255,255,255,${opacity})`
+    ctx.beginPath()
+    ctx.arc(f.x, f.y, radius, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
 // ─── Component ──────────────────────────────────────────────────────
 
 const GRID_COLORS = "#2a2a2a,#3b3b3b,#525252"
@@ -478,6 +723,8 @@ type Props = {
   wiggle: WiggleParams
   starfield: StarfieldParams
   twist: TwistParams
+  displace: DisplaceParams
+  shimmer: ShimmerParams
   className?: string
   children?: React.ReactNode
 }
@@ -489,6 +736,8 @@ export function PixelBackground({
   wiggle,
   starfield,
   twist,
+  displace,
+  shimmer,
   className,
   children,
 }: Props) {
@@ -498,6 +747,9 @@ export function PixelBackground({
   const particlesRef = React.useRef<Particle[]>([])
   const cellsRef = React.useRef<GridCell[]>([])
   const starsRef = React.useRef<Star[]>([])
+  const floatersRef = React.useRef<Floater[]>([])
+  const touchForcesRef = React.useRef<TouchForce[]>([])
+  const shimmerCellsRef = React.useRef<ShimmerCell[]>([])
   const dimsRef = React.useRef({ w: 0, h: 0 })
   const animationRef = React.useRef<number | null>(null)
   const lastFrameRef = React.useRef(0)
@@ -512,6 +764,8 @@ export function PixelBackground({
   })
   const twistLiveRef = React.useRef(twist)
   const starfieldLiveRef = React.useRef(starfield)
+  const displaceLiveRef = React.useRef(displace)
+  const shimmerLiveRef = React.useRef(shimmer)
   const liveRef = React.useRef({ pattern })
 
   // Push the latest slider values into the mutable refs the RAF loop reads.
@@ -527,6 +781,8 @@ export function PixelBackground({
     wiggleLiveRef.current.twinkle = wiggle.twinkle
     twistLiveRef.current = twist
     starfieldLiveRef.current = starfield
+    displaceLiveRef.current = displace
+    shimmerLiveRef.current = shimmer
     liveRef.current = { pattern }
   })
 
@@ -572,6 +828,9 @@ export function PixelBackground({
     canvasRef.current.style.height = `${height}px`
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     dimsRef.current = { w: width, h: height }
+    // displace-only state — cleared here so a pattern switch or resize starts clean.
+    floatersRef.current = []
+    touchForcesRef.current = []
 
     if (pattern === "grid") {
       const gapInt = Math.max(1, Math.floor(grid.gap))
@@ -615,6 +874,39 @@ export function PixelBackground({
       cellsRef.current = cells
       pixelsRef.current = []
       particlesRef.current = []
+    } else if (pattern === "displace") {
+      // Pre-warm with a spread of ages so the field isn't empty on entry.
+      const p = displaceLiveRef.current
+      const cap = Math.max(0, Math.floor(p.count))
+      const seedN = Math.min(cap, 40)
+      const now = performance.now() / 1000
+      const seed: Floater[] = []
+      for (let i = 0; i < seedN; i++) {
+        seed.push(spawnFloater(width, height, p, now, Math.random() * 2))
+      }
+      floatersRef.current = seed
+      pixelsRef.current = []
+      particlesRef.current = []
+      cellsRef.current = []
+    } else if (pattern === "shimmer") {
+      const sp = Math.max(1, shimmer.spacing)
+      const cols = Math.floor(width / sp) + 2
+      const rows = Math.floor(height / sp) + 2
+      const cells: ShimmerCell[] = []
+      for (let row = 0; row <= rows; row++) {
+        for (let col = 0; col <= cols; col++) {
+          // Hash row/col into a stable per-dot phase + frequency (32-bit
+          // wrapping multiply, matching the Swift &* hash).
+          const hash = (Math.imul(row, 73856093) ^ Math.imul(col, 19349663)) >>> 0
+          const phase = ((hash & 0xff) / 255) * Math.PI * 2
+          const freq = 0.7 + ((hash >>> 8) & 0xff) / 255
+          cells.push({ x: col * sp, y: row * sp, col, row, phase, freq })
+        }
+      }
+      shimmerCellsRef.current = cells
+      pixelsRef.current = []
+      particlesRef.current = []
+      cellsRef.current = []
     } else {
       // starfield — stars are generated in the dedicated effect above;
       // init just resets the canvas dims.
@@ -629,6 +921,7 @@ export function PixelBackground({
     grid.speed,
     wiggle.count,
     twist.gap,
+    shimmer.spacing,
   ])
 
   React.useEffect(() => {
@@ -646,7 +939,11 @@ export function PixelBackground({
       const dt = now - lastFrameRef.current
       const pat = liveRef.current.pattern
 
-      if (pat === "grid") {
+      // grid and shimmer are both dense per-cell loops; cap them at ~60fps so a
+      // high-refresh display doesn't double the draw cost. grid needs it for
+      // correctness (its size step is per-frame); shimmer is absolute-time
+      // driven, so throttling only skips redundant frames — the look is identical.
+      if (pat === "grid" || pat === "shimmer") {
         const timeInterval = 1000 / 60
         if (dt < timeInterval) return
         lastFrameRef.current = now - (dt % timeInterval)
@@ -691,6 +988,27 @@ export function PixelBackground({
           h,
           now / 1000,
         )
+      } else if (pat === "displace") {
+        const { w, h } = dimsRef.current
+        const nowSec = now / 1000
+        const dtSec = Math.min(dt, 64) / 1000
+        const p = displaceLiveRef.current
+        // Drop pointer forces older than the decay window (compact in place).
+        const forces = touchForcesRef.current
+        let fw = 0
+        for (let i = 0; i < forces.length; i++) {
+          if (nowSec - forces[i].t < FLOAT_DECAY) forces[fw++] = forces[i]
+        }
+        forces.length = fw
+        updateFloaters(floatersRef.current, forces, p, w, h, nowSec, dtSec)
+        drawFloaters(ctx, floatersRef.current, p, nowSec)
+      } else if (pat === "shimmer") {
+        renderShimmer(
+          ctx,
+          shimmerCellsRef.current,
+          shimmerLiveRef.current,
+          now / 1000,
+        )
       }
     }
 
@@ -703,6 +1021,21 @@ export function PixelBackground({
     }
   }, [])
 
+  // Record a pointer position as a transient repulsion force. Only wired up
+  // for the displace pattern (the canvas is otherwise pointer-transparent).
+  const addTouchForce = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    touchForcesRef.current.push({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      t: performance.now() / 1000,
+    })
+  }
+
+  const interactive = pattern === "displace"
+
   return (
     <div
       ref={containerRef}
@@ -710,8 +1043,14 @@ export function PixelBackground({
     >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 h-full w-full pointer-events-none"
-        style={{ opacity: pixelOpacity }}
+        className="absolute inset-0 h-full w-full"
+        style={{
+          opacity: pixelOpacity,
+          pointerEvents: interactive ? "auto" : "none",
+          touchAction: interactive ? "none" : undefined,
+        }}
+        onPointerDown={interactive ? addTouchForce : undefined}
+        onPointerMove={interactive ? addTouchForce : undefined}
       />
       {children ? <div className="relative z-[1]">{children}</div> : null}
     </div>
