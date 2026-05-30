@@ -32,9 +32,9 @@ pnpm preview  # serve the production build
 Three files do everything:
 
 - [src/App.tsx](src/App.tsx) — holds one state object per pattern (`grid`,
-  `wiggle`, `starfield`, `twist`), the active `pattern`, and a per-pattern
-  `opacity` map (`OPACITY_DEFAULTS`). Switching patterns preserves each
-  pattern's params and its own opacity.
+  `wiggle`, `starfield`, `twist`, `displace`, `shimmer`), the active `pattern`,
+  and a per-pattern `opacity` map (`OPACITY_DEFAULTS`). Switching patterns
+  preserves each pattern's params and its own opacity.
 - [src/components/PixelBackground.tsx](src/components/PixelBackground.tsx) —
   pattern type defs, exported defaults, per-pattern render logic, and the canvas
   component (DPR-aware sizing, init, and the RAF loop). Types and defaults are
@@ -105,16 +105,45 @@ alpha = floor + (peak − floor)·crest·env
 Params: `gap`, `dotSize`, `peak`, `zoom`, `twist`, `arms`, `spin`, `drift`,
 `width`, `floor`.
 
+### `displace`
+Upward-drifting particles that fade in → peak → out over their lifetime. The
+canvas becomes interactive only for this pattern (`pointerEvents: auto`,
+`touchAction: none`); a pointer press/drag deposits short-lived forces that
+repel nearby particles with a quadratic falloff, then framerate-independent
+friction (`pow(friction, dt·60)`) settles them back into the rise. Ported from
+an iOS onboarding `floatingParticles` view modifier.
+Params: `count`, `emission`, `sizeMin`/`sizeMax`, `speedMin`/`speedMax`,
+`lifetime`, `drift`, `forceRadius`, `forceStrength`, `friction`.
+
+### `shimmer`
+Dot grid whose per-dot alpha is two summed sine sources:
+
+```
+baseWave = sin(t·0.6 + col·dxFactor) + cos(t·0.4 + row·dyFactor)
+pulse    = sin(t·shimmerSpeed·freq + phase)
+alpha    = baseAlpha + alphaMultiplier·|(pulse + baseWave)/4|
+```
+
+`baseWave` is a global travelling wave; `pulse` is a per-dot pulse with a hashed
+phase/`freq` (`Math.imul`, matching Swift's `&*`), so the field never locks into
+one rhythm. Cells are built in `init` from `spacing` (structural); everything
+else is live. Ported from a SwiftUI `DotPatternView`.
+Params: `spacing`, `dotSize`, `shimmerSpeed`, `dxFactor`, `dyFactor`,
+`baseAlpha`, `alphaMultiplier`.
+
 ## Conventions
 
 - **Live params vs. structural params.** Slider edits flow into the running
   animation by reference through a mutable ref per pattern (`twistLiveRef`,
   etc.), so drags stay smooth. Only structural params (`gap`, `count`, `seed`)
   are in the `init` dependency array and trigger a full reinit.
-- **`grid` is throttled to ~60fps.** Its size math is per-frame, not
-  dt-scaled. `lastFrameRef` must advance only on rendered frames, or the
-  throttle starves the loop on high-refresh displays. Other patterns are
-  dt-scaled (or use absolute time) and run every RAF.
+- **`grid` and `shimmer` are throttled to ~60fps.** `grid` needs it for
+  correctness — its size math is per-frame, not dt-scaled. `shimmer` is a dense
+  per-cell loop but absolute-time driven, so throttling only skips redundant
+  frames on high-refresh displays — the look is identical, the draw cost halves.
+  `lastFrameRef` must advance only on rendered frames, or the throttle starves
+  the loop on high-refresh displays. The remaining patterns are dt-scaled (or
+  use absolute time) and run every RAF.
 - Time source for periodic patterns is `performance.now() / 1000`; absolute time
   is fine because the functions are periodic.
 - Canvas is DPR-aware: the backing store is sized to `devicePixelRatio` and the
