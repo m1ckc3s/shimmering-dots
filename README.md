@@ -11,7 +11,7 @@ You copy the two source files into your project, dial in the look with the
 sliders, lock the values in, and ship. Think of it as a cookbook of generative
 backgrounds you own outright, not a dependency you pull in.
 
-New patterns get added over time. Today there are six.
+New patterns get added over time. Today there are nine.
 
 ## Patterns
 
@@ -23,6 +23,13 @@ New patterns get added over time. Today there are six.
 | `twist` | A near-blank grid lit by a rotating Archimedean spiral vortex. Zoom is a true camera dolly; Twist sets the arm count. |
 | `displace` | Particles drift upward and fade across their lifetime; moving the cursor (or a touch) repels nearby ones, then friction settles them back into the rise. The only interactive pattern. |
 | `shimmer` | Dot grid whose per-dot opacity rides overlapping sine waves — a global travelling wave plus a hashed per-dot pulse — so it shimmers without locking into one rhythm. |
+| `organic` | Flat dot grid lit by a curl-like vector field; layered sine crests sweep across the grid orthogonally to the flow, over a faint static grid. |
+| `aurora` | Flat dot grid lit by a stacked-sine field; each dot tones up to the field intensity at its cell centre, for a soft, drifting glow. |
+| `morph` | Flat dot grid where a per-cell noise-like angle steers a moving phase wavefront, so the lit regions morph and snake across the grid. |
+
+`organic`, `aurora`, and `morph` share one knob set (speed, brightness, dot
+size, density, scale, vignette) — all multipliers, so the defaults reproduce
+each field's stock look.
 
 Every pattern renders to a single `<canvas>` via plain Canvas 2D +
 `requestAnimationFrame`. No WebGL, no animation libraries.
