@@ -20,13 +20,14 @@ import { cn } from "@/lib/utils"
 //               sine waves: a global travelling wave plus a per-dot pulse with
 //               a hashed phase/frequency, so the field shimmers without locking
 //               into one rhythm. Ported from a SwiftUI `DotPatternView`.
-//   organic      — flat dot grid lit by curl-like organic wavefronts: a layered
-//               sine field whose crests sweep across the grid orthogonally to
-//               the organic direction.
-//   aurora    — flat dot grid lit by a classic stacked-sine aurora field; each
-//               dot tones up to the aurora intensity at its cell centre.
-//   morph     — flat dot grid where a per-cell organic angle steers a moving
-//               phase wavefront, so brightness travels in snaking trails.
+//   organic   — flat dot grid lit by a curl-like vector field: a layered sine
+//               field whose crests sweep across the grid orthogonally to the
+//               field direction, over a faint static grid.
+//   aurora    — flat dot grid lit by a classic stacked-sine field; each dot
+//               tones up to the field intensity at its cell centre, for a soft,
+//               drifting glow.
+//   morph     — flat dot grid where a per-cell noise-like angle steers a moving
+//               phase wavefront, so the lit regions morph and snake across it.
 
 export const PATTERNS = [
   "grid",
@@ -104,7 +105,7 @@ export type DisplaceParams = {
 }
 
 // organic / aurora / morph share one knob set — each is a flat dot grid lit by a
-// different procedural field. All four knobs are multipliers against the field's
+// different procedural field. All six knobs are multipliers against the field's
 // built-in constants, so the all-1 default reproduces each field's stock look.
 export type FieldParams = {
   speed: number // time multiplier driving the field's motion
@@ -908,8 +909,9 @@ function renderMorph(
   const rgb = fieldFillRgb(p.brightness)
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]
-    // Per-cell organic angle → a unit direction; brightness peaks where the cell
-    // aligns with the moving phase wavefront along that direction.
+    // A per-cell noise-like angle → a unit direction; brightness peaks where
+    // the cell aligns with the moving phase wavefront along that direction, so
+    // the lit regions morph and snake across the grid.
     const angle =
       Math.sin(c.u * 4 * ps + t * 0.6) * 1.2 +
       Math.cos(c.v * 4 * ps - t * 0.5) * 1.2 +
