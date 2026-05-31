@@ -7,6 +7,9 @@ import {
   TWIST_DEFAULTS,
   DISPLACE_DEFAULTS,
   SHIMMER_DEFAULTS,
+  ORGANIC_DEFAULTS,
+  AURORA_DEFAULTS,
+  MORPH_DEFAULTS,
   type Pattern,
   type GridParams,
   type WiggleParams,
@@ -14,6 +17,9 @@ import {
   type TwistParams,
   type DisplaceParams,
   type ShimmerParams,
+  type OrganicParams,
+  type AuroraParams,
+  type MorphParams,
 } from "@/components/PixelBackground"
 import { Controls } from "@/components/Controls"
 
@@ -26,6 +32,9 @@ const OPACITY_DEFAULTS: Record<Pattern, number> = {
   twist: 0.65,
   displace: 1,
   shimmer: 0.65,
+  organic: 1,
+  aurora: 1,
+  morph: 1,
 }
 
 export default function App() {
@@ -42,6 +51,9 @@ export default function App() {
   const [twist, setTwist] = useState<TwistParams>(TWIST_DEFAULTS)
   const [displace, setDisplace] = useState<DisplaceParams>(DISPLACE_DEFAULTS)
   const [shimmer, setShimmer] = useState<ShimmerParams>(SHIMMER_DEFAULTS)
+  const [organic, setOrganic] = useState<OrganicParams>(ORGANIC_DEFAULTS)
+  const [aurora, setAurora] = useState<AuroraParams>(AURORA_DEFAULTS)
+  const [morph, setMorph] = useState<MorphParams>(MORPH_DEFAULTS)
 
   return (
     <div className="relative h-full w-full bg-[#070707]">
@@ -54,6 +66,9 @@ export default function App() {
         twist={twist}
         displace={displace}
         shimmer={shimmer}
+        organic={organic}
+        aurora={aurora}
+        morph={morph}
         className="absolute inset-0"
       />
       <div className="pointer-events-none fixed bottom-6 right-6 z-10">
@@ -66,6 +81,9 @@ export default function App() {
           twist={twist}
           displace={displace}
           shimmer={shimmer}
+          organic={organic}
+          aurora={aurora}
+          morph={morph}
           onPatternChange={setPattern}
           onOpacityChange={setOpacity}
           onGridChange={setGrid}
@@ -74,6 +92,9 @@ export default function App() {
           onTwistChange={setTwist}
           onDisplaceChange={setDisplace}
           onShimmerChange={setShimmer}
+          onOrganicChange={setOrganic}
+          onAuroraChange={setAurora}
+          onMorphChange={setMorph}
         />
       </div>
     </div>

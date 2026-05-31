@@ -32,7 +32,8 @@ pnpm preview  # serve the production build
 Three files do everything:
 
 - [src/App.tsx](src/App.tsx) — holds one state object per pattern (`grid`,
-  `wiggle`, `starfield`, `twist`, `displace`, `shimmer`), the active `pattern`,
+  `wiggle`, `starfield`, `twist`, `displace`, `shimmer`, `organic`, `aurora`,
+  `morph`), the active `pattern`,
   and a per-pattern `opacity` map (`OPACITY_DEFAULTS`). Switching patterns
   preserves each pattern's params and its own opacity.
 - [src/components/PixelBackground.tsx](src/components/PixelBackground.tsx) —
@@ -131,16 +132,40 @@ else is live. Ported from a SwiftUI `DotPatternView`.
 Params: `spacing`, `dotSize`, `shimmerSpeed`, `dxFactor`, `dyFactor`,
 `baseAlpha`, `alphaMultiplier`.
 
+### `organic`, `aurora`, `morph`
+
+Three flat (non-perspective) dot grids lit by a procedural field, sharing one
+knob set (`FieldParams`: `speed`, `brightness`, `dotSize`, `density`, `scale`,
+`vignette`). Each is a per-cell evaluation of a field: `buildFieldCells` tiles a
+normalised space centred on the canvas and scaled by height
+(`u = (px−w/2)/h`, `v = (py−h/2)/h`), then each frame computes a 0–1 intensity
+per cell and draws a small white dot at that alpha over the page background (the
+field is otherwise dark). Every knob is a multiplier on the field's built-in
+constants, so all-1 defaults reproduce each field's stock look. `density` is
+structural (sets the cell pitch, `base/density`, where `base` is
+`ORGANIC_GRID`/`AURORA_GRID`/`MORPH_GRID`); the rest are live. `brightness`
+folds into the dot's grey value; `vignette` darkens toward the edges. All three
+are absolute-time driven and throttled to ~60fps.
+
+- **`organic`** — layered sine field whose crests (`sin(n·6 + …)`) sweep as
+  wavefronts orthogonal to a curl-like flow; a `0.10` base keeps a faint static
+  grid visible.
+- **`aurora`** — stacked-sine field (`pow(·, 2.5)`), no base term, so only the
+  lit regions show — a soft, drifting glow.
+- **`morph`** — a per-cell noise-like angle steers a moving phase wavefront
+  (`pow(·, 4)`), so brightness morphs and snakes across the grid; `0.10` base.
+
 ## Conventions
 
 - **Live params vs. structural params.** Slider edits flow into the running
   animation by reference through a mutable ref per pattern (`twistLiveRef`,
   etc.), so drags stay smooth. Only structural params (`gap`, `count`, `seed`)
   are in the `init` dependency array and trigger a full reinit.
-- **`grid` and `shimmer` are throttled to ~60fps.** `grid` needs it for
-  correctness — its size math is per-frame, not dt-scaled. `shimmer` is a dense
-  per-cell loop but absolute-time driven, so throttling only skips redundant
-  frames on high-refresh displays — the look is identical, the draw cost halves.
+- **`grid`, `shimmer`, `organic`, `aurora`, and `morph` are throttled to
+  ~60fps.** `grid` needs it for correctness — its size math is per-frame, not
+  dt-scaled. The others are dense per-cell loops but absolute-time driven, so
+  throttling only skips redundant frames on high-refresh displays — the look is
+  identical, the draw cost halves.
   `lastFrameRef` must advance only on rendered frames, or the throttle starves
   the loop on high-refresh displays. The remaining patterns are dt-scaled (or
   use absolute time) and run every RAF.

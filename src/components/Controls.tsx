@@ -12,9 +12,16 @@ import {
   type GridParams,
   type WiggleParams,
   type StarfieldParams,
+  ORGANIC_DEFAULTS,
+  AURORA_DEFAULTS,
+  MORPH_DEFAULTS,
   type TwistParams,
   type DisplaceParams,
   type ShimmerParams,
+  type FieldParams,
+  type OrganicParams,
+  type AuroraParams,
+  type MorphParams,
 } from "./PixelBackground"
 
 type Props = {
@@ -26,6 +33,9 @@ type Props = {
   twist: TwistParams
   displace: DisplaceParams
   shimmer: ShimmerParams
+  organic: OrganicParams
+  aurora: AuroraParams
+  morph: MorphParams
   onPatternChange: (v: Pattern) => void
   onOpacityChange: (v: number) => void
   onGridChange: (p: GridParams) => void
@@ -34,6 +44,9 @@ type Props = {
   onTwistChange: (p: TwistParams) => void
   onDisplaceChange: (p: DisplaceParams) => void
   onShimmerChange: (p: ShimmerParams) => void
+  onOrganicChange: (p: OrganicParams) => void
+  onAuroraChange: (p: AuroraParams) => void
+  onMorphChange: (p: MorphParams) => void
   className?: string
 }
 
@@ -46,6 +59,9 @@ export function Controls({
   twist,
   displace,
   shimmer,
+  organic,
+  aurora,
+  morph,
   onPatternChange,
   onOpacityChange,
   onGridChange,
@@ -54,6 +70,9 @@ export function Controls({
   onTwistChange,
   onDisplaceChange,
   onShimmerChange,
+  onOrganicChange,
+  onAuroraChange,
+  onMorphChange,
   className,
 }: Props) {
   const [open, setOpen] = useState(true)
@@ -65,6 +84,9 @@ export function Controls({
     else if (pattern === "twist") onTwistChange(TWIST_DEFAULTS)
     else if (pattern === "displace") onDisplaceChange(DISPLACE_DEFAULTS)
     else if (pattern === "shimmer") onShimmerChange(SHIMMER_DEFAULTS)
+    else if (pattern === "organic") onOrganicChange(ORGANIC_DEFAULTS)
+    else if (pattern === "aurora") onAuroraChange(AURORA_DEFAULTS)
+    else if (pattern === "morph") onMorphChange(MORPH_DEFAULTS)
   }
 
   return (
@@ -132,6 +154,15 @@ export function Controls({
           )}
           {pattern === "shimmer" && (
             <ShimmerControls params={shimmer} onChange={onShimmerChange} />
+          )}
+          {pattern === "organic" && (
+            <FieldControls params={organic} onChange={onOrganicChange} />
+          )}
+          {pattern === "aurora" && (
+            <FieldControls params={aurora} onChange={onAuroraChange} />
+          )}
+          {pattern === "morph" && (
+            <FieldControls params={morph} onChange={onMorphChange} />
           )}
         </AnimatedHeight>
 
@@ -363,6 +394,30 @@ function ShimmerControls({
       <Slider label="Wave Y" value={params.dyFactor} min={0.05} max={1} step={0.05} onChange={(v) => set("dyFactor", v)} format={(v) => v.toFixed(2)} />
       <Slider label="Base" value={params.baseAlpha} min={0} max={1} step={0.05} onChange={(v) => set("baseAlpha", v)} format={(v) => v.toFixed(2)} />
       <Slider label="Intensity" value={params.alphaMultiplier} min={0} max={8} step={0.1} onChange={(v) => set("alphaMultiplier", v)} format={(v) => v.toFixed(1)} />
+    </>
+  )
+}
+
+// Shared panel for the organic / aurora / morph fields — they share one
+// multiplier knob set, so a single component drives all three.
+function FieldControls({
+  params,
+  onChange,
+}: {
+  params: FieldParams
+  onChange: (p: FieldParams) => void
+}) {
+  const set = <K extends keyof FieldParams>(key: K, v: FieldParams[K]) =>
+    onChange({ ...params, [key]: v })
+  const f2 = (v: number) => v.toFixed(2)
+  return (
+    <>
+      <Slider label="Speed" value={params.speed} min={0} max={3} step={0.05} onChange={(v) => set("speed", v)} format={f2} />
+      <Slider label="Brightness" value={params.brightness} min={0} max={3} step={0.05} onChange={(v) => set("brightness", v)} format={f2} />
+      <Slider label="Dot Size" value={params.dotSize} min={0.2} max={3} step={0.05} onChange={(v) => set("dotSize", v)} format={f2} />
+      <Slider label="Density" value={params.density} min={0.3} max={3} step={0.05} onChange={(v) => set("density", v)} format={f2} />
+      <Slider label="Scale" value={params.scale} min={0.2} max={3} step={0.05} onChange={(v) => set("scale", v)} format={f2} />
+      <Slider label="Vignette" value={params.vignette} min={0} max={3} step={0.05} onChange={(v) => set("vignette", v)} format={f2} />
     </>
   )
 }

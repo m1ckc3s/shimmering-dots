@@ -20,8 +20,25 @@ import { cn } from "@/lib/utils"
 //               sine waves: a global travelling wave plus a per-dot pulse with
 //               a hashed phase/frequency, so the field shimmers without locking
 //               into one rhythm. Ported from a SwiftUI `DotPatternView`.
+//   organic      — flat dot grid lit by curl-like organic wavefronts: a layered
+//               sine field whose crests sweep across the grid orthogonally to
+//               the organic direction.
+//   aurora    — flat dot grid lit by a classic stacked-sine aurora field; each
+//               dot tones up to the aurora intensity at its cell centre.
+//   morph     — flat dot grid where a per-cell organic angle steers a moving
+//               phase wavefront, so brightness travels in snaking trails.
 
-export const PATTERNS = ["grid", "wiggle", "starfield", "twist", "displace", "shimmer"] as const
+export const PATTERNS = [
+  "grid",
+  "wiggle",
+  "starfield",
+  "twist",
+  "displace",
+  "shimmer",
+  "organic",
+  "aurora",
+  "morph",
+] as const
 export type Pattern = (typeof PATTERNS)[number]
 
 export type GridParams = {
@@ -86,6 +103,22 @@ export type DisplaceParams = {
   friction: number // per-frame velocity retention at 60fps (0–1)
 }
 
+// organic / aurora / morph share one knob set — each is a flat dot grid lit by a
+// different procedural field. All four knobs are multipliers against the field's
+// built-in constants, so the all-1 default reproduces each field's stock look.
+export type FieldParams = {
+  speed: number // time multiplier driving the field's motion
+  brightness: number // dot tone multiplier (folded into the fill colour)
+  dotSize: number // per-dot radius multiplier
+  density: number // grid density multiplier (structural)
+  scale: number // spatial-frequency multiplier for the field
+  vignette: number // screen-edge darkening strength (0 disables)
+}
+
+export type OrganicParams = FieldParams
+export type AuroraParams = FieldParams
+export type MorphParams = FieldParams
+
 export const GRID_DEFAULTS: GridParams = {
   gap: 25,
   dotSize: 3.5,
@@ -147,6 +180,34 @@ export const DISPLACE_DEFAULTS: DisplaceParams = {
   forceRadius: 120,
   forceStrength: 470,
   friction: 0.92,
+}
+
+// All-1 multipliers reproduce each field's stock appearance.
+export const ORGANIC_DEFAULTS: OrganicParams = {
+  speed: 1,
+  brightness: 1,
+  dotSize: 1,
+  density: 1,
+  scale: 1,
+  vignette: 1,
+}
+
+export const AURORA_DEFAULTS: AuroraParams = {
+  speed: 1,
+  brightness: 1,
+  dotSize: 1,
+  density: 1,
+  scale: 1,
+  vignette: 1,
+}
+
+export const MORPH_DEFAULTS: MorphParams = {
+  speed: 1,
+  brightness: 1,
+  dotSize: 1,
+  density: 1,
+  scale: 1,
+  vignette: 1,
 }
 
 // ─── Pattern: grid ──────────────────────────────────────────────────
@@ -712,6 +773,162 @@ function drawFloaters(
   }
 }
 
+// ─── Patterns: organic / aurora / morph ─────────────────────────────────
+// Flat dot grids lit by a procedural field evaluated at each cell centre.
+// The reference fields are written in a normalised space centred on the
+// canvas and scaled by height: u = (px − w/2)/h, v = (py − h/2)/h. Cells
+// tile that space at a constant pitch; each pattern computes a 0–1 intensity
+// per cell and draws a small dot with that alpha (white, scaled by brightness)
+// over the page background — the field is otherwise dark.
+
+type FieldCell = {
+  px: number // device-independent pixel position
+  py: number
+  u: number // normalised field coords (centred, height-scaled)
+  v: number
+  len: number // hypot(u, v) — used by the radial terms
+  vd: number // squared vignette radius: vx² + vy², vx=(px−w/2)/w, vy=(py−h/2)/h
+}
+
+// Builds the cell grid for the active field. `pitch` is the cell spacing in
+// normalised (height-scaled) units; structural, so this only runs on reinit.
+function buildFieldCells(
+  width: number,
+  height: number,
+  pitch: number,
+): FieldCell[] {
+  const cells: FieldCell[] = []
+  if (width <= 0 || height <= 0 || pitch <= 0) return cells
+  const kxMax = Math.ceil(width / (2 * height) / pitch) + 1
+  const kyMax = Math.ceil(0.5 / pitch) + 1
+  for (let ky = -kyMax; ky <= kyMax; ky++) {
+    const v = ky * pitch
+    const py = v * height + height / 2
+    if (py < -4 || py > height + 4) continue
+    const vy = (py - height / 2) / height
+    for (let kx = -kxMax; kx <= kxMax; kx++) {
+      const u = kx * pitch
+      const px = u * height + width / 2
+      if (px < -4 || px > width + 4) continue
+      const vx = (px - width / 2) / width
+      cells.push({
+        px,
+        py,
+        u,
+        v,
+        len: Math.sqrt(u * u + v * v),
+        vd: vx * vx + vy * vy,
+      })
+    }
+  }
+  return cells
+}
+
+const TAU = Math.PI * 2
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+
+// Normalised pitch is `base / density`; `base` differs per field. These match
+// the stock grid constants of each reference field.
+export const ORGANIC_GRID = 0.02
+export const AURORA_GRID = 0.018
+export const MORPH_GRID = 0.018
+
+function fieldFillRgb(brightness: number): string {
+  const c = Math.min(255, Math.max(0, Math.round(255 * brightness)))
+  return `${c},${c},${c}`
+}
+
+function renderOrganic(
+  ctx: CanvasRenderingContext2D,
+  cells: FieldCell[],
+  p: OrganicParams,
+  t: number,
+) {
+  const ps = p.scale
+  const dotR = 1.4 * Math.max(0.05, p.dotSize)
+  const vK = 0.85 * p.vignette
+  const rgb = fieldFillRgb(p.brightness)
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i]
+    const n =
+      Math.sin(c.u * 3 * ps + t * 0.4) * Math.cos(c.v * 3 * ps - t * 0.35) +
+      0.5 *
+        Math.sin(c.u * 7 * ps - t * 0.6) *
+        Math.sin(c.v * 7 * ps + t * 0.55)
+    const fronts = Math.sin(n * 6 + c.len * 8 * ps - t * 1.8)
+    const bright = Math.pow(Math.max(0, fronts), 1.8)
+    const vig = clamp01(1 - c.vd * vK)
+    const intensity = (0.1 + bright) * vig
+    if (intensity < 0.01) continue
+    ctx.fillStyle = `rgba(${rgb},${intensity < 1 ? intensity : 1})`
+    ctx.beginPath()
+    ctx.arc(c.px, c.py, dotR, 0, TAU)
+    ctx.fill()
+  }
+}
+
+function renderAurora(
+  ctx: CanvasRenderingContext2D,
+  cells: FieldCell[],
+  p: AuroraParams,
+  t: number,
+) {
+  const ps = p.scale
+  const dotR = 1.6 * Math.max(0.05, p.dotSize)
+  const vK = 0.9 * p.vignette
+  const rgb = fieldFillRgb(p.brightness)
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i]
+    let v =
+      Math.sin(c.u * 8 * ps + t * 1.3) +
+      Math.sin(c.v * 8 * ps + t * 1.1) +
+      Math.sin((c.u + c.v) * 6 * ps + t * 1.5) +
+      Math.sin(c.len * 10 * ps - t * 1.8)
+    v *= 0.25
+    const bright = Math.pow(clamp01(0.5 + 0.5 * v), 2.5)
+    const vig = clamp01(1 - c.vd * vK)
+    const intensity = bright * vig
+    if (intensity < 0.01) continue
+    ctx.fillStyle = `rgba(${rgb},${intensity < 1 ? intensity : 1})`
+    ctx.beginPath()
+    ctx.arc(c.px, c.py, dotR, 0, TAU)
+    ctx.fill()
+  }
+}
+
+function renderMorph(
+  ctx: CanvasRenderingContext2D,
+  cells: FieldCell[],
+  p: MorphParams,
+  t: number,
+) {
+  const ps = p.scale
+  const dotR = 1.5 * Math.max(0.05, p.dotSize)
+  const vK = 0.7 * p.vignette
+  const rgb = fieldFillRgb(p.brightness)
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i]
+    // Per-cell organic angle → a unit direction; brightness peaks where the cell
+    // aligns with the moving phase wavefront along that direction.
+    const angle =
+      Math.sin(c.u * 4 * ps + t * 0.6) * 1.2 +
+      Math.cos(c.v * 4 * ps - t * 0.5) * 1.2 +
+      Math.sin((c.u + c.v) * 3 * ps + t * 0.9)
+    const fx = Math.cos(angle)
+    const fy = Math.sin(angle)
+    const phase = (c.u * fx + c.v * fy) * 12 * ps - t * 4
+    let bright = 0.5 + 0.5 * Math.sin(phase)
+    bright = bright * bright * bright * bright // ^4
+    const vig = clamp01(1 - c.vd * vK)
+    const intensity = (0.1 + 1.1 * bright) * vig
+    if (intensity < 0.01) continue
+    ctx.fillStyle = `rgba(${rgb},${intensity < 1 ? intensity : 1})`
+    ctx.beginPath()
+    ctx.arc(c.px, c.py, dotR, 0, TAU)
+    ctx.fill()
+  }
+}
+
 // ─── Component ──────────────────────────────────────────────────────
 
 const GRID_COLORS = "#2a2a2a,#3b3b3b,#525252"
@@ -725,6 +942,9 @@ type Props = {
   twist: TwistParams
   displace: DisplaceParams
   shimmer: ShimmerParams
+  organic: OrganicParams
+  aurora: AuroraParams
+  morph: MorphParams
   className?: string
   children?: React.ReactNode
 }
@@ -738,6 +958,9 @@ export function PixelBackground({
   twist,
   displace,
   shimmer,
+  organic,
+  aurora,
+  morph,
   className,
   children,
 }: Props) {
@@ -750,6 +973,7 @@ export function PixelBackground({
   const floatersRef = React.useRef<Floater[]>([])
   const touchForcesRef = React.useRef<TouchForce[]>([])
   const shimmerCellsRef = React.useRef<ShimmerCell[]>([])
+  const fieldCellsRef = React.useRef<FieldCell[]>([])
   const dimsRef = React.useRef({ w: 0, h: 0 })
   const animationRef = React.useRef<number | null>(null)
   const lastFrameRef = React.useRef(0)
@@ -766,6 +990,9 @@ export function PixelBackground({
   const starfieldLiveRef = React.useRef(starfield)
   const displaceLiveRef = React.useRef(displace)
   const shimmerLiveRef = React.useRef(shimmer)
+  const organicLiveRef = React.useRef(organic)
+  const auroraLiveRef = React.useRef(aurora)
+  const morphLiveRef = React.useRef(morph)
   const liveRef = React.useRef({ pattern })
 
   // Push the latest slider values into the mutable refs the RAF loop reads.
@@ -783,6 +1010,9 @@ export function PixelBackground({
     starfieldLiveRef.current = starfield
     displaceLiveRef.current = displace
     shimmerLiveRef.current = shimmer
+    organicLiveRef.current = organic
+    auroraLiveRef.current = aurora
+    morphLiveRef.current = morph
     liveRef.current = { pattern }
   })
 
@@ -907,6 +1137,24 @@ export function PixelBackground({
       pixelsRef.current = []
       particlesRef.current = []
       cellsRef.current = []
+    } else if (pattern === "organic" || pattern === "aurora" || pattern === "morph") {
+      const base =
+        pattern === "organic"
+          ? ORGANIC_GRID
+          : pattern === "aurora"
+            ? AURORA_GRID
+            : MORPH_GRID
+      const density =
+        pattern === "organic"
+          ? organic.density
+          : pattern === "aurora"
+            ? aurora.density
+            : morph.density
+      const pitch = base / Math.max(0.01, density)
+      fieldCellsRef.current = buildFieldCells(width, height, pitch)
+      pixelsRef.current = []
+      particlesRef.current = []
+      cellsRef.current = []
     } else {
       // starfield — stars are generated in the dedicated effect above;
       // init just resets the canvas dims.
@@ -922,6 +1170,9 @@ export function PixelBackground({
     wiggle.count,
     twist.gap,
     shimmer.spacing,
+    organic.density,
+    aurora.density,
+    morph.density,
   ])
 
   React.useEffect(() => {
@@ -943,7 +1194,13 @@ export function PixelBackground({
       // high-refresh display doesn't double the draw cost. grid needs it for
       // correctness (its size step is per-frame); shimmer is absolute-time
       // driven, so throttling only skips redundant frames — the look is identical.
-      if (pat === "grid" || pat === "shimmer") {
+      if (
+        pat === "grid" ||
+        pat === "shimmer" ||
+        pat === "organic" ||
+        pat === "aurora" ||
+        pat === "morph"
+      ) {
         const timeInterval = 1000 / 60
         if (dt < timeInterval) return
         lastFrameRef.current = now - (dt % timeInterval)
@@ -1009,6 +1266,15 @@ export function PixelBackground({
           shimmerLiveRef.current,
           now / 1000,
         )
+      } else if (pat === "organic") {
+        const p = organicLiveRef.current
+        renderOrganic(ctx, fieldCellsRef.current, p, (now / 1000) * p.speed)
+      } else if (pat === "aurora") {
+        const p = auroraLiveRef.current
+        renderAurora(ctx, fieldCellsRef.current, p, (now / 1000) * p.speed)
+      } else if (pat === "morph") {
+        const p = morphLiveRef.current
+        renderMorph(ctx, fieldCellsRef.current, p, (now / 1000) * p.speed)
       }
     }
 
