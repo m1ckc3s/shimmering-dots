@@ -15,6 +15,7 @@ import {
   ORGANIC_DEFAULTS,
   AURORA_DEFAULTS,
   MORPH_DEFAULTS,
+  METEORS_DEFAULTS,
   type TwistParams,
   type DisplaceParams,
   type ShimmerParams,
@@ -22,6 +23,7 @@ import {
   type OrganicParams,
   type AuroraParams,
   type MorphParams,
+  type MeteorsParams,
 } from "./PixelBackground"
 
 type Props = {
@@ -36,6 +38,7 @@ type Props = {
   organic: OrganicParams
   aurora: AuroraParams
   morph: MorphParams
+  meteors: MeteorsParams
   onPatternChange: (v: Pattern) => void
   onOpacityChange: (v: number) => void
   onGridChange: (p: GridParams) => void
@@ -47,6 +50,7 @@ type Props = {
   onOrganicChange: (p: OrganicParams) => void
   onAuroraChange: (p: AuroraParams) => void
   onMorphChange: (p: MorphParams) => void
+  onMeteorsChange: (p: MeteorsParams) => void
   className?: string
 }
 
@@ -62,6 +66,7 @@ export function Controls({
   organic,
   aurora,
   morph,
+  meteors,
   onPatternChange,
   onOpacityChange,
   onGridChange,
@@ -73,6 +78,7 @@ export function Controls({
   onOrganicChange,
   onAuroraChange,
   onMorphChange,
+  onMeteorsChange,
   className,
 }: Props) {
   const [open, setOpen] = useState(true)
@@ -87,11 +93,11 @@ export function Controls({
     else if (pattern === "organic") onOrganicChange(ORGANIC_DEFAULTS)
     else if (pattern === "aurora") onAuroraChange(AURORA_DEFAULTS)
     else if (pattern === "morph") onMorphChange(MORPH_DEFAULTS)
+    else if (pattern === "meteors") onMeteorsChange(METEORS_DEFAULTS)
   }
 
   return (
     <div className={cn("relative font-mono", className)}>
-      {/* Collapsed state: a pill that expands back into the panel. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -164,6 +170,9 @@ export function Controls({
           {pattern === "morph" && (
             <FieldControls params={morph} onChange={onMorphChange} />
           )}
+          {pattern === "meteors" && (
+            <MeteorsControls params={meteors} onChange={onMeteorsChange} />
+          )}
         </AnimatedHeight>
 
         <Slider
@@ -183,10 +192,6 @@ export function Controls({
   )
 }
 
-// Animates the panel's height when the active pattern's control set changes
-// (each pattern has a different number of sliders). Measures the live content
-// with a ResizeObserver and transitions `height`; overflow is clipped so the
-// incoming controls are revealed as the box morphs.
 function AnimatedHeight({ children }: { children: React.ReactNode }) {
   const innerRef = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState<number>()
@@ -206,8 +211,6 @@ function AnimatedHeight({ children }: { children: React.ReactNode }) {
       className="overflow-hidden transition-[height] duration-300 ease-out"
       style={{ height }}
     >
-      {/* py-1 keeps the first/last slider thumbs (which overflow the 6px track)
-          from being clipped by overflow-hidden. */}
       <div ref={innerRef} className="space-y-4 py-1">
         {children}
       </div>
@@ -398,8 +401,6 @@ function ShimmerControls({
   )
 }
 
-// Shared panel for the organic / aurora / morph fields — they share one
-// multiplier knob set, so a single component drives all three.
 function FieldControls({
   params,
   onChange,
@@ -422,6 +423,87 @@ function FieldControls({
   )
 }
 
+function MeteorsControls({
+  params,
+  onChange,
+}: {
+  params: MeteorsParams
+  onChange: (p: MeteorsParams) => void
+}) {
+  const set = <K extends keyof MeteorsParams>(key: K, v: MeteorsParams[K]) =>
+    onChange({ ...params, [key]: v })
+  const secs = (v: number) => `${v.toFixed(1)}s`
+  const pct = (v: number) => `${Math.round(v * 100)}%`
+  return (
+    <>
+      <Slider label="Count" value={params.count} min={1} max={50} step={1} onChange={(v) => set("count", v)} />
+      <Slider label="Angle" value={params.angle} min={0} max={360} step={1} onChange={(v) => set("angle", v)} format={(v) => `${Math.round(v)}°`} />
+      <Slider label="Speed" value={params.speed} min={50} max={1200} step={10} onChange={(v) => set("speed", v)} />
+      <RangeSlider
+        label="Lifespan"
+        valueMin={params.lifeMin}
+        valueMax={params.lifeMax}
+        min={0.05}
+        max={0.95}
+        step={0.01}
+        onChange={(lo, hi) => onChange({ ...params, lifeMin: lo, lifeMax: hi })}
+        format={pct}
+      />
+      <Slider label="Fade Out Speed" value={params.fadeSpeed} min={0.05} max={1} step={0.05} onChange={(v) => set("fadeSpeed", v)} format={(v) => v.toFixed(2)} />
+      <Slider label="Length" value={params.length} min={20} max={400} step={10} onChange={(v) => set("length", v)} />
+      <Slider label="Width" value={params.width} min={0.5} max={10} step={0.5} onChange={(v) => set("width", v)} format={(v) => v.toFixed(1)} />
+      <Slider label="Delay" value={params.delay} min={0} max={12} step={0.5} onChange={(v) => set("delay", v)} format={secs} />
+      <Divider />
+      <Toggle
+        label="Starfield"
+        checked={params.showStarfield}
+        onChange={(v) => set("showStarfield", v)}
+      />
+    </>
+  )
+}
+
+function Divider() {
+  return <div className="mt-1 border-t border-white/[0.08]" />
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[11px] uppercase tracking-wide text-white/70">
+        {label}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative box-border h-5 w-9 shrink-0 cursor-pointer rounded-full border transition-colors",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-white/20",
+          checked ? "border-white bg-white" : "border-white/[0.08] bg-white/[0.08]",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-transform",
+            checked ? "translate-x-4 bg-[#070707]" : "translate-x-0 bg-white",
+          )}
+        />
+      </button>
+    </div>
+  )
+}
+
 type SliderProps = {
   label: string
   value: number
@@ -441,8 +523,6 @@ function Slider({
   onChange,
   format,
 }: SliderProps) {
-  // Clamp so an out-of-range value (e.g. default that exceeds max) doesn't
-  // overflow the panel layout.
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))
   return (
     <div>

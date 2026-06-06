@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'reference']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -20,10 +20,7 @@ export default defineConfig([
     },
   },
   {
-    // This file deliberately co-exports the pattern types and *_DEFAULTS next
-    // to the canvas component (Controls and App import them). That trips the
-    // react-refresh rule, which only governs dev-time Fast Refresh and has no
-    // bearing on the build — scope it off here.
+    // PixelBackground co-exports types/defaults with the component; off-build-only rule.
     files: ['src/components/PixelBackground.tsx'],
     rules: {
       'react-refresh/only-export-components': 'off',
