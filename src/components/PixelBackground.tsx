@@ -1,34 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-// Patterns:
-//   grid      — random-delay reveal + perpetual size shimmer on a dense
-//               grid of dark dots.
-//   wiggle    — sparse white particles with two independent animation
-//               cycles (drift + twinkle). Port of StarrySkyView.swift.
-//   starfield — port of MicksStars.tsx (Framer). Seeded random
-//               positions, per-star duration twinkle from 1 to faded
-//               opacity and back. No motion — pure cosine pulse.
-//   twist      — near-blank grid lit by a rotating Archimedean spiral vortex
-//               (uniform arc spacing). Arms converge at a 2D-drifting centre;
-//               Zoom dollies the whole structure, Twist sets the arm count.
-//   displace  — particles drift upward and fade in/out over their lifetime;
-//               moving the cursor (or a touch) repels nearby ones with a
-//               quadratic falloff, then friction settles them back into the
-//               rise. Ported from an iOS onboarding `floatingParticles` modifier.
-//   shimmer   — dense dot grid whose per-dot alpha is driven by overlapping
-//               sine waves: a global travelling wave plus a per-dot pulse with
-//               a hashed phase/frequency, so the field shimmers without locking
-//               into one rhythm. Ported from a SwiftUI `DotPatternView`.
-//   organic   — flat dot grid lit by a curl-like vector field: a layered sine
-//               field whose crests sweep across the grid orthogonally to the
-//               field direction, over a faint static grid.
-//   aurora    — flat dot grid lit by a classic stacked-sine field; each dot
-//               tones up to the field intensity at its cell centre, for a soft,
-//               drifting glow.
-//   morph     — flat dot grid where a per-cell noise-like angle steers a moving
-//               phase wavefront, so the lit regions morph and snake across it.
-
 export const PATTERNS = [
   "grid",
   "wiggle",
@@ -39,6 +11,7 @@ export const PATTERNS = [
   "organic",
   "aurora",
   "morph",
+  "meteors",
 ] as const
 export type Pattern = (typeof PATTERNS)[number]
 
@@ -81,44 +54,54 @@ export type TwistParams = {
 }
 
 export type ShimmerParams = {
-  spacing: number // dot grid pitch, px (structural)
+  spacing: number
   dotSize: number
-  shimmerSpeed: number // per-dot pulse rate
-  dxFactor: number // global wave spatial frequency, x
-  dyFactor: number // global wave spatial frequency, y
-  baseAlpha: number // floor opacity every dot keeps
-  alphaMultiplier: number // how far the shimmer swings above the floor
+  shimmerSpeed: number
+  dxFactor: number
+  dyFactor: number
+  baseAlpha: number
+  alphaMultiplier: number
 }
 
 export type DisplaceParams = {
-  count: number // max particles alive at once
-  emission: number // spawns per second
+  count: number
+  emission: number
   sizeMin: number
   sizeMax: number
-  speedMin: number // upward speed, px/s
+  speedMin: number
   speedMax: number
-  lifetime: number // seconds (with internal ±15% jitter)
-  drift: number // horizontal wander amplitude, px/s
-  forceRadius: number // pointer influence radius, px
-  forceStrength: number // pointer push strength
-  friction: number // per-frame velocity retention at 60fps (0–1)
+  lifetime: number
+  drift: number
+  forceRadius: number
+  forceStrength: number
+  friction: number
 }
 
-// organic / aurora / morph share one knob set — each is a flat dot grid lit by a
-// different procedural field. All six knobs are multipliers against the field's
-// built-in constants, so the all-1 default reproduces each field's stock look.
 export type FieldParams = {
-  speed: number // time multiplier driving the field's motion
-  brightness: number // dot tone multiplier (folded into the fill colour)
-  dotSize: number // per-dot radius multiplier
-  density: number // grid density multiplier (structural)
-  scale: number // spatial-frequency multiplier for the field
-  vignette: number // screen-edge darkening strength (0 disables)
+  speed: number
+  brightness: number
+  dotSize: number
+  density: number
+  scale: number
+  vignette: number
 }
 
 export type OrganicParams = FieldParams
 export type AuroraParams = FieldParams
 export type MorphParams = FieldParams
+
+export type MeteorsParams = {
+  count: number
+  angle: number
+  showStarfield: boolean
+  speed: number
+  lifeMin: number
+  lifeMax: number
+  fadeSpeed: number
+  length: number
+  width: number
+  delay: number
+}
 
 export const GRID_DEFAULTS: GridParams = {
   gap: 25,
@@ -158,7 +141,6 @@ export const TWIST_DEFAULTS: TwistParams = {
   floor: 0,
 }
 
-// Values carried over from the SwiftUI DotPatternView defaults.
 export const SHIMMER_DEFAULTS: ShimmerParams = {
   spacing: 18,
   dotSize: 3,
@@ -183,13 +165,12 @@ export const DISPLACE_DEFAULTS: DisplaceParams = {
   friction: 0.92,
 }
 
-// All-1 multipliers reproduce each field's stock appearance.
 export const ORGANIC_DEFAULTS: OrganicParams = {
   speed: 1,
-  brightness: 1,
+  brightness: 2,
   dotSize: 1,
   density: 1,
-  scale: 1,
+  scale: 2,
   vignette: 1,
 }
 
@@ -211,7 +192,18 @@ export const MORPH_DEFAULTS: MorphParams = {
   vignette: 1,
 }
 
-// ─── Pattern: grid ──────────────────────────────────────────────────
+export const METEORS_DEFAULTS: MeteorsParams = {
+  count: 5,
+  angle: 20,
+  showStarfield: true,
+  speed: 60,
+  lifeMin: 0.3,
+  lifeMax: 0.7,
+  fadeSpeed: 0.2,
+  length: 240,
+  width: 2,
+  delay: 11,
+}
 
 class Pixel {
   width: number
@@ -307,10 +299,6 @@ function getEffectiveSpeed(value: number, reducedMotion: boolean) {
   if (value >= max) return max * throttle
   return value * throttle
 }
-
-// ─── Pattern: wiggle ────────────────────────────────────────────────
-// Two independent cycles per particle (drift + twinkle) so neighbors
-// don't lock into a global rhythm.
 
 const easeInOut = (t: number) => t * t * (3 - 2 * t)
 
@@ -462,12 +450,6 @@ class Particle {
   }
 }
 
-// ─── Pattern: starfield (Framer port) ───────────────────────────────
-// Positions stored as percentages so window resize doesn't shuffle the
-// field — only seed/quantity changes regenerate. Each star twinkles on
-// its own cycle: opacity = faded + (1-faded) * (cos(2π·t/duration + φ)
-// * 0.5 + 0.5). Matches the CSS keyframe 0/50/100 = end/mid/end.
-
 function mulberry32(seed: number) {
   let a = seed | 0
   return function () {
@@ -507,7 +489,6 @@ function renderStarfield(
     const cyc = Math.cos(phase) * 0.5 + 0.5
     const opacity = faded + opacitySpan * cyc
     if (opacity < 0.01) continue
-    // Framer original applied transform: scale(1.5); preserve that.
     const radius = (size * 1.5) / 2
     if (radius < 0.05) continue
     ctx.fillStyle = `rgba(255,255,255,${opacity})`
@@ -516,8 +497,6 @@ function renderStarfield(
     ctx.fill()
   }
 }
-
-// ─── Pattern: twist ──────────────────────────────────────────────────
 
 type GridCell = { x: number; y: number }
 const TWIST_RGB = "220,220,220"
@@ -540,27 +519,16 @@ function renderTwist(
 
   const ref = Math.min(width, height) * 0.5
   const zoom = Math.max(0.3, p.zoom)
-  // Organic 2D drift: the vortex centre wanders on a non-repeating path
-  // (sum of incommensurate sines per axis) instead of sliding left/right.
   const cx =
     width / 2 +
     p.drift * (0.62 * Math.sin(t * 0.11) + 0.38 * Math.sin(t * 0.041 + 2.1))
   const cy =
     height / 2 +
     p.drift * (0.62 * Math.sin(t * 0.09 + 1.7) + 0.38 * Math.sin(t * 0.034 + 0.5))
-  // Rotating the whole spiral over time = the vortex spinning.
   const spin = t * p.spin
-  // Zoom = a true camera dolly: the envelope and the arc spacing both scale
-  // with it, so the whole structure magnifies uniformly against the fixed
-  // screen frame. (Calibrated so zoom≈20.5 ≈ the old ref*1.15.)
   const spread = ref * 0.056 * zoom
-  // Archimedean spiral: the radial spacing between arms (`pitch`) is CONSTANT
-  // with radius — every arc is the same width apart, unlike a log/Fibonacci
-  // spiral whose spacing explodes outward. `twist` sets how many arms fit in
-  // the bright band (≈ spread / pitch); arc thickness stays uniform too.
   const pitch = spread / Math.max(0.5, twist)
   const TAU = Math.PI * 2
-  // Small smoothstep fade at the very centre so the arms meet at a clean point.
   const coreR = pitch * 0.35
 
   for (let i = 0; i < cells.length; i++) {
@@ -571,8 +539,6 @@ function renderTwist(
     const theta = Math.atan2(dy, dx)
     const wv = Math.cos((TAU * r) / pitch - arms * theta - spin)
     const crest = Math.pow(Math.max(0, wv), width2)
-    // Bright at the centre, fading toward the edges; smoothstep fade of the
-    // tiny core so the arms meet at a clean convergence point.
     const rr = r / spread
     const k = Math.min(1, r / coreR)
     const coreFade = k * k * (3 - 2 * k)
@@ -586,19 +552,13 @@ function renderTwist(
   }
 }
 
-// ─── Pattern: shimmer ────────────────────────────────────────────────
-// A dot grid whose per-dot alpha is the sum of two sine sources: a global
-// travelling wave (dxFactor/dyFactor set its spatial frequency across the
-// grid) and a per-dot pulse with a hashed phase and frequency. Blended and
-// rectified into an opacity that swings from `baseAlpha` up by `alphaMultiplier`.
-
 type ShimmerCell = {
   x: number
   y: number
   col: number
   row: number
-  phase: number // 0–2π, hashed per cell
-  freq: number // 0.7–1.7, hashed per cell
+  phase: number
+  freq: number
 }
 const SHIMMER_RGB = "160,160,160"
 
@@ -631,32 +591,25 @@ function renderShimmer(
   }
 }
 
-// ─── Pattern: displace ────────────────────────────────────────────────
-// Upward-drifting particles with a pointer-repulsion force field. Each
-// particle rises at its own speed, wanders horizontally, and fades in →
-// peak → out across its lifetime. A pointer press/drag deposits short-lived
-// TouchForces; nearby particles are pushed away (quadratic falloff inside a
-// radius) and friction bleeds that velocity off so they rejoin the rise.
-
 type Floater = {
   x: number
   y: number
-  sizeT: number // 0–1 lerp across [sizeMin, sizeMax]
-  speedT: number // 0–1 lerp across [speedMin, speedMax]
-  driftDir: number // −1..1 horizontal drift scale
-  vx: number // interactive velocity (from pointer forces)
+  sizeT: number
+  speedT: number
+  driftDir: number
+  vx: number
   vy: number
-  birth: number // seconds
-  lifetime: number // seconds
-  peak: number // peak opacity
+  birth: number
+  lifetime: number
+  peak: number
 }
 
-type TouchForce = { x: number; y: number; t: number } // t in seconds
+type TouchForce = { x: number; y: number; t: number }
 
-const FLOAT_DECAY = 0.3 // seconds a pointer force stays active
-const FLOAT_FADE_IN = 0.5 // seconds
-const FLOAT_FADE_OUT = 1.0 // seconds
-const FLOAT_SPAWN_LO = 0.3 // spawn band, as a fraction of view height
+const FLOAT_DECAY = 0.3
+const FLOAT_FADE_IN = 0.5
+const FLOAT_FADE_OUT = 1.0
+const FLOAT_SPAWN_LO = 0.3
 const FLOAT_SPAWN_HI = 1.05
 
 function spawnFloater(
@@ -682,9 +635,6 @@ function spawnFloater(
   }
 }
 
-// Physics step + cull + emission. Mutates `floaters` in place (compacting the
-// array) and reads everything else from the live params, so slider edits apply
-// without a reinit.
 function updateFloaters(
   floaters: Floater[],
   forces: TouchForce[],
@@ -694,8 +644,6 @@ function updateFloaters(
   now: number,
   dt: number,
 ) {
-  // Make friction framerate-independent: the source applied it once per 60fps
-  // frame, so raise it to (dt·60) to match across refresh rates.
   const frictionPow = Math.pow(p.friction, dt * 60)
   const speedSpan = Math.max(0, p.speedMax - p.speedMin)
 
@@ -703,7 +651,6 @@ function updateFloaters(
   for (let i = 0; i < floaters.length; i++) {
     const f = floaters[i]
 
-    // Pointer repulsion — push away from each active force, quadratic falloff.
     for (let j = 0; j < forces.length; j++) {
       const force = forces[j]
       const dx = f.x - force.x
@@ -717,23 +664,20 @@ function updateFloaters(
       }
     }
 
-    // Friction, then integrate the interactive velocity.
     f.vx *= frictionPow
     f.vy *= frictionPow
     f.x += f.vx * dt
     f.y += f.vy * dt
 
-    // Constant upward rise + gentle horizontal wander.
     f.y -= (p.speedMin + f.speedT * speedSpan) * dt
     f.x += f.driftDir * p.drift * dt
 
     const age = now - f.birth
-    if (age > f.lifetime || f.y < -10) continue // cull
+    if (age > f.lifetime || f.y < -10) continue
     floaters[w++] = f
   }
   floaters.length = w
 
-  // Emit up to the live cap. Whole spawns this frame plus a fractional chance.
   const cap = Math.max(0, Math.floor(p.count))
   let toEmit = p.emission * dt
   while (toEmit >= 1 && floaters.length < cap) {
@@ -774,25 +718,15 @@ function drawFloaters(
   }
 }
 
-// ─── Patterns: organic / aurora / morph ─────────────────────────────────
-// Flat dot grids lit by a procedural field evaluated at each cell centre.
-// The reference fields are written in a normalised space centred on the
-// canvas and scaled by height: u = (px − w/2)/h, v = (py − h/2)/h. Cells
-// tile that space at a constant pitch; each pattern computes a 0–1 intensity
-// per cell and draws a small dot with that alpha (white, scaled by brightness)
-// over the page background — the field is otherwise dark.
-
 type FieldCell = {
-  px: number // device-independent pixel position
+  px: number
   py: number
-  u: number // normalised field coords (centred, height-scaled)
+  u: number
   v: number
-  len: number // hypot(u, v) — used by the radial terms
-  vd: number // squared vignette radius: vx² + vy², vx=(px−w/2)/w, vy=(py−h/2)/h
+  len: number
+  vd: number
 }
 
-// Builds the cell grid for the active field. `pitch` is the cell spacing in
-// normalised (height-scaled) units; structural, so this only runs on reinit.
 function buildFieldCells(
   width: number,
   height: number,
@@ -828,8 +762,6 @@ function buildFieldCells(
 const TAU = Math.PI * 2
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
 
-// Normalised pitch is `base / density`; `base` differs per field. These match
-// the stock grid constants of each reference field.
 export const ORGANIC_GRID = 0.02
 export const AURORA_GRID = 0.018
 export const MORPH_GRID = 0.018
@@ -909,9 +841,6 @@ function renderMorph(
   const rgb = fieldFillRgb(p.brightness)
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]
-    // A per-cell noise-like angle → a unit direction; brightness peaks where
-    // the cell aligns with the moving phase wavefront along that direction, so
-    // the lit regions morph and snake across the grid.
     const angle =
       Math.sin(c.u * 4 * ps + t * 0.6) * 1.2 +
       Math.cos(c.v * 4 * ps - t * 0.5) * 1.2 +
@@ -920,7 +849,7 @@ function renderMorph(
     const fy = Math.sin(angle)
     const phase = (c.u * fx + c.v * fy) * 12 * ps - t * 4
     let bright = 0.5 + 0.5 * Math.sin(phase)
-    bright = bright * bright * bright * bright // ^4
+    bright = bright * bright * bright * bright
     const vig = clamp01(1 - c.vd * vK)
     const intensity = (0.1 + 1.1 * bright) * vig
     if (intensity < 0.01) continue
@@ -931,7 +860,140 @@ function renderMorph(
   }
 }
 
-// ─── Component ──────────────────────────────────────────────────────
+function meteorRandRange(min: number, max: number) {
+  return min + Math.random() * (max - min)
+}
+
+function meteorAxis(angleRad: number, w: number, h: number) {
+  const dx = Math.cos(angleRad)
+  const dy = Math.sin(angleRad)
+  const px = -dy
+  const py = dx
+  const corners = [
+    [0, 0],
+    [w, 0],
+    [0, h],
+    [w, h],
+  ]
+  let aMin = Infinity
+  let aMax = -Infinity
+  let pMin = Infinity
+  let pMax = -Infinity
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i][0] * dx + corners[i][1] * dy
+    const p = corners[i][0] * px + corners[i][1] * py
+    if (a < aMin) aMin = a
+    if (a > aMax) aMax = a
+    if (p < pMin) pMin = p
+    if (p > pMax) pMax = p
+  }
+  return { dx, dy, px, py, aMin, aLen: Math.max(1, aMax - aMin), pMin, pMax }
+}
+
+const METEOR_FADE_IN = 0.12
+
+class Meteor {
+  state: "idle" | "active" = "idle"
+  timer = 0
+  dx = 1
+  dy = 0
+  px = 0
+  py = 1
+  aMin = 0
+  aLen = 1
+  cross = 0
+  reach = 0.6
+  speed = 1
+  f = 0
+
+  spawn(width: number, height: number, p: MeteorsParams) {
+    const ax = meteorAxis(p.angle * (Math.PI / 180), width, height)
+    this.dx = ax.dx
+    this.dy = ax.dy
+    this.px = ax.px
+    this.py = ax.py
+    this.aMin = ax.aMin
+    this.aLen = ax.aLen
+    this.cross = meteorRandRange(ax.pMin - p.length, ax.pMax + p.length)
+    const lo = Math.min(p.lifeMin, p.lifeMax)
+    const hi = Math.max(p.lifeMin, p.lifeMax)
+    this.reach = Math.min(0.95, Math.max(0.05, meteorRandRange(lo, hi)))
+    this.speed = Math.max(1, p.speed) * meteorRandRange(0.85, 1.15)
+    this.f = 0
+    this.state = "active"
+  }
+
+  update(dt: number, width: number, height: number, p: MeteorsParams) {
+    if (this.state === "idle") {
+      this.timer -= dt
+      if (this.timer <= 0) this.spawn(width, height, p)
+      return
+    }
+    this.f += (this.speed / this.aLen) * dt
+    if (this.f >= this.reach) {
+      this.state = "idle"
+      this.timer = p.delay * meteorRandRange(0.7, 1.3)
+    }
+  }
+
+  private fadeOutStart(p: MeteorsParams) {
+    return this.reach * Math.min(0.98, Math.max(0.02, p.fadeSpeed))
+  }
+
+  opacity(p: MeteorsParams) {
+    const fadeInEnd = METEOR_FADE_IN * this.reach
+    if (this.f < fadeInEnd) return this.f / fadeInEnd
+    const start = this.fadeOutStart(p)
+    if (this.f > start) {
+      return Math.max(0, (this.reach - this.f) / (this.reach - start))
+    }
+    return 1
+  }
+}
+
+function renderMeteors(
+  ctx: CanvasRenderingContext2D,
+  meteors: Meteor[],
+  p: MeteorsParams,
+  width: number,
+  height: number,
+  dt: number,
+) {
+  for (let i = 0; i < meteors.length; i++) {
+    meteors[i].update(dt, width, height, p)
+  }
+
+  const lineW = Math.max(0.5, p.width)
+
+  ctx.save()
+  ctx.lineCap = "round"
+  ctx.shadowColor = "rgba(255,255,255,0.9)"
+  ctx.shadowBlur = 6
+  for (let i = 0; i < meteors.length; i++) {
+    const m = meteors[i]
+    if (m.state !== "active") continue
+    const op = m.opacity(p)
+    if (op <= 0.01) continue
+
+    const headAlong = m.aMin + m.f * m.aLen
+    const tailAlong = headAlong - p.length
+    const hx = headAlong * m.dx + m.cross * m.px
+    const hy = headAlong * m.dy + m.cross * m.py
+    const tx = tailAlong * m.dx + m.cross * m.px
+    const ty = tailAlong * m.dy + m.cross * m.py
+
+    const grad = ctx.createLinearGradient(hx, hy, tx, ty)
+    grad.addColorStop(0, `rgba(255,255,255,${op})`)
+    grad.addColorStop(1, "rgba(255,255,255,0)")
+    ctx.strokeStyle = grad
+    ctx.lineWidth = lineW
+    ctx.beginPath()
+    ctx.moveTo(hx, hy)
+    ctx.lineTo(tx, ty)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
 
 const GRID_COLORS = "#2a2a2a,#3b3b3b,#525252"
 
@@ -947,6 +1009,7 @@ type Props = {
   organic: OrganicParams
   aurora: AuroraParams
   morph: MorphParams
+  meteors: MeteorsParams
   className?: string
   children?: React.ReactNode
 }
@@ -963,6 +1026,7 @@ export function PixelBackground({
   organic,
   aurora,
   morph,
+  meteors,
   className,
   children,
 }: Props) {
@@ -976,6 +1040,7 @@ export function PixelBackground({
   const touchForcesRef = React.useRef<TouchForce[]>([])
   const shimmerCellsRef = React.useRef<ShimmerCell[]>([])
   const fieldCellsRef = React.useRef<FieldCell[]>([])
+  const meteorsRef = React.useRef<Meteor[]>([])
   const dimsRef = React.useRef({ w: 0, h: 0 })
   const animationRef = React.useRef<number | null>(null)
   const lastFrameRef = React.useRef(0)
@@ -995,13 +1060,9 @@ export function PixelBackground({
   const organicLiveRef = React.useRef(organic)
   const auroraLiveRef = React.useRef(aurora)
   const morphLiveRef = React.useRef(morph)
+  const meteorsLiveRef = React.useRef(meteors)
   const liveRef = React.useRef({ pattern })
 
-  // Push the latest slider values into the mutable refs the RAF loop reads.
-  // Done after commit (not during render) so we never mutate refs mid-render.
-  // No dep array on purpose: this must run on every commit, and it stays
-  // before the init effect so a pattern switch is visible to the loop in sync
-  // with the reinit.
   React.useEffect(() => {
     wiggleLiveRef.current.sizeMin = wiggle.sizeMin
     wiggleLiveRef.current.sizeMax = wiggle.sizeMax
@@ -1015,6 +1076,7 @@ export function PixelBackground({
     organicLiveRef.current = organic
     auroraLiveRef.current = aurora
     morphLiveRef.current = morph
+    meteorsLiveRef.current = meteors
     liveRef.current = { pattern }
   })
 
@@ -1025,13 +1087,21 @@ export function PixelBackground({
     lastFrameRef.current = performance.now()
   }, [])
 
-  // Starfield star generation — independent of resize. Only regenerate
-  // when seed or quantity changes; size/duration/faded read live.
   React.useEffect(() => {
-    if (pattern !== "starfield") return
-    const rng = mulberry32(starfield.seed)
+    let seed: number
+    let quantity: number
+    if (pattern === "starfield") {
+      seed = starfield.seed
+      quantity = starfield.quantity
+    } else if (pattern === "meteors") {
+      seed = STARFIELD_DEFAULTS.seed
+      quantity = STARFIELD_DEFAULTS.quantity
+    } else {
+      return
+    }
+    const rng = mulberry32(seed)
     const stars: Star[] = []
-    const n = Math.max(0, Math.floor(starfield.quantity))
+    const n = Math.max(0, Math.floor(quantity))
     for (let i = 0; i < n; i++) {
       stars.push({
         xPct: rng(),
@@ -1060,7 +1130,6 @@ export function PixelBackground({
     canvasRef.current.style.height = `${height}px`
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     dimsRef.current = { w: width, h: height }
-    // displace-only state — cleared here so a pattern switch or resize starts clean.
     floatersRef.current = []
     touchForcesRef.current = []
 
@@ -1107,7 +1176,6 @@ export function PixelBackground({
       pixelsRef.current = []
       particlesRef.current = []
     } else if (pattern === "displace") {
-      // Pre-warm with a spread of ages so the field isn't empty on entry.
       const p = displaceLiveRef.current
       const cap = Math.max(0, Math.floor(p.count))
       const seedN = Math.min(cap, 40)
@@ -1127,8 +1195,6 @@ export function PixelBackground({
       const cells: ShimmerCell[] = []
       for (let row = 0; row <= rows; row++) {
         for (let col = 0; col <= cols; col++) {
-          // Hash row/col into a stable per-dot phase + frequency (32-bit
-          // wrapping multiply, matching the Swift &* hash).
           const hash = (Math.imul(row, 73856093) ^ Math.imul(col, 19349663)) >>> 0
           const phase = ((hash & 0xff) / 255) * Math.PI * 2
           const freq = 0.7 + ((hash >>> 8) & 0xff) / 255
@@ -1157,9 +1223,25 @@ export function PixelBackground({
       pixelsRef.current = []
       particlesRef.current = []
       cellsRef.current = []
+    } else if (pattern === "meteors") {
+      const p = meteorsLiveRef.current
+      const n = Math.max(0, Math.floor(meteors.count))
+      const arr: Meteor[] = []
+      for (let i = 0; i < n; i++) {
+        const m = new Meteor()
+        m.spawn(width, height, p)
+        m.f = Math.random() * m.reach
+        if (Math.random() < 0.25) {
+          m.state = "idle"
+          m.timer = Math.random() * p.delay
+        }
+        arr.push(m)
+      }
+      meteorsRef.current = arr
+      pixelsRef.current = []
+      particlesRef.current = []
+      cellsRef.current = []
     } else {
-      // starfield — stars are generated in the dedicated effect above;
-      // init just resets the canvas dims.
       pixelsRef.current = []
       particlesRef.current = []
       cellsRef.current = []
@@ -1175,6 +1257,7 @@ export function PixelBackground({
     organic.density,
     aurora.density,
     morph.density,
+    meteors.count,
   ])
 
   React.useEffect(() => {
@@ -1192,10 +1275,6 @@ export function PixelBackground({
       const dt = now - lastFrameRef.current
       const pat = liveRef.current.pattern
 
-      // grid and shimmer are both dense per-cell loops; cap them at ~60fps so a
-      // high-refresh display doesn't double the draw cost. grid needs it for
-      // correctness (its size step is per-frame); shimmer is absolute-time
-      // driven, so throttling only skips redundant frames — the look is identical.
       if (
         pat === "grid" ||
         pat === "shimmer" ||
@@ -1252,7 +1331,6 @@ export function PixelBackground({
         const nowSec = now / 1000
         const dtSec = Math.min(dt, 64) / 1000
         const p = displaceLiveRef.current
-        // Drop pointer forces older than the decay window (compact in place).
         const forces = touchForcesRef.current
         let fw = 0
         for (let i = 0; i < forces.length; i++) {
@@ -1277,6 +1355,14 @@ export function PixelBackground({
       } else if (pat === "morph") {
         const p = morphLiveRef.current
         renderMorph(ctx, fieldCellsRef.current, p, (now / 1000) * p.speed)
+      } else if (pat === "meteors") {
+        const { w, h } = dimsRef.current
+        const dtSec = Math.min(dt, 64) / 1000
+        const mp = meteorsLiveRef.current
+        if (mp.showStarfield) {
+          renderStarfield(ctx, starsRef.current, STARFIELD_DEFAULTS, w, h, now / 1000)
+        }
+        renderMeteors(ctx, meteorsRef.current, mp, w, h, dtSec)
       }
     }
 
@@ -1289,8 +1375,6 @@ export function PixelBackground({
     }
   }, [])
 
-  // Record a pointer position as a transient repulsion force. Only wired up
-  // for the displace pattern (the canvas is otherwise pointer-transparent).
   const addTouchForce = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return

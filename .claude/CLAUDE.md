@@ -33,7 +33,7 @@ Three files do everything:
 
 - [src/App.tsx](src/App.tsx) — holds one state object per pattern (`grid`,
   `wiggle`, `starfield`, `twist`, `displace`, `shimmer`, `organic`, `aurora`,
-  `morph`), the active `pattern`,
+  `morph`, `meteors`), the active `pattern`,
   and a per-pattern `opacity` map (`OPACITY_DEFAULTS`). Switching patterns
   preserves each pattern's params and its own opacity.
 - [src/components/PixelBackground.tsx](src/components/PixelBackground.tsx) —
@@ -155,12 +155,39 @@ are absolute-time driven and throttled to ~60fps.
 - **`morph`** — a per-cell noise-like angle steers a moving phase wavefront
   (`pow(·, 4)`), so brightness morphs and snakes across the grid; `0.10` base.
 
+### `meteors`
+A calm meteor shower ported from a motion-based component. `count` independent
+capsules (round-capped strokes) all travel the same direction (`angle`, degrees).
+Each loops: streak → burn out → idle for `delay` (±30% jitter) → respawn, so they
+stagger. The non-obvious parts:
+
+- **Never reaches the far edge.** Each meteor picks a burn-out distance `reach`
+  from the Lifespan range — a fraction of the screen span along the travel axis,
+  capped ≤0.95 — and fully fades by then, so it always dies before the downstream
+  edge.
+- **Burn-out is a uniform opacity fade, not a length shrink.** The capsule glides
+  at constant velocity and full length; burn-out scales the whole
+  head-bright→tail-transparent gradient toward 0. Because the tail is already
+  faint, a uniform fade reads as the head burning out. (Geometric shrink was tried
+  both ways — anchoring the head makes the tail rush in; anchoring the tail makes
+  the head stall. Both look wrong. Do not reintroduce a length-shrink.)
+- Travel basis is fixed at spawn (`meteorAxis` projects the canvas corners onto
+  the direction), so a live `angle` change only applies on the next ignition.
+- `showStarfield` draws the `starfield` field (with `STARFIELD_DEFAULTS`) behind
+  the shower; stars regenerate whenever the pattern is `meteors` or `starfield`.
+
+Params: `count` (structural), `angle`, `showStarfield`, `speed` (px/s),
+`lifeMin`/`lifeMax` (Lifespan, fraction of span), `fadeSpeed` (Fade Out Speed,
+higher = quicker), `length`, `width`, `delay` (s).
+
 ## Conventions
 
 - **Live params vs. structural params.** Slider edits flow into the running
   animation by reference through a mutable ref per pattern (`twistLiveRef`,
   etc.), so drags stay smooth. Only structural params (`gap`, `count`, `seed`)
-  are in the `init` dependency array and trigger a full reinit.
+  are in the `init` dependency array and trigger a full reinit. The effect that
+  copies the latest props into the `*LiveRef`s runs on **every commit with no
+  dependency array** (so live edits reach the RAF loop) — don't add a dep array.
 - **`grid`, `shimmer`, `organic`, `aurora`, and `morph` are throttled to
   ~60fps.** `grid` needs it for correctness — its size math is per-frame, not
   dt-scaled. The others are dense per-cell loops but absolute-time driven, so

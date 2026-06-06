@@ -11,7 +11,7 @@ You copy the two source files into your project, dial in the look with the
 sliders, lock the values in, and ship. Think of it as a cookbook of generative
 backgrounds you own outright, not a dependency you pull in.
 
-New patterns get added over time. Today there are nine.
+New patterns get added over time. Today there are ten.
 
 ## Patterns
 
@@ -26,6 +26,7 @@ New patterns get added over time. Today there are nine.
 | `organic` | Flat dot grid lit by a curl-like vector field; layered sine crests sweep across the grid orthogonally to the flow, over a faint static grid. |
 | `aurora` | Flat dot grid lit by a stacked-sine field; each dot tones up to the field intensity at its cell centre, for a soft, drifting glow. |
 | `morph` | Flat dot grid where a per-cell noise-like angle steers a moving phase wavefront, so the lit regions morph and snake across the grid. |
+| `meteors` | A calm meteor shower: capsule streaks share one travel direction (with a tweakable angle) and fade out before reaching the far edge, like burning up in the atmosphere. Optional seeded starfield behind them. |
 
 `organic`, `aurora`, and `morph` share one knob set (speed, brightness, dot
 size, density, scale, vignette) — all multipliers, so the defaults reproduce
