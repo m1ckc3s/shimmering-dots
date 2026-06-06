@@ -196,13 +196,13 @@ export const METEORS_DEFAULTS: MeteorsParams = {
   count: 5,
   angle: 20,
   showStarfield: true,
-  speed: 60,
+  speed: 500,
   lifeMin: 0.3,
   lifeMax: 0.7,
   fadeSpeed: 0.2,
   length: 240,
   width: 2,
-  delay: 11,
+  delay: 5,
 }
 
 class Pixel {
